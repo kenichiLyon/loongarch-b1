@@ -1,0 +1,23 @@
+{
+  "name": "loongarch-b1",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.2",
+  "description": "基于大模型技术的软件实训教学结果检查评价与报表系统",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "check": "pnpm typecheck && pnpm build"
+  },
+  "engines": {
+    "node": ">=22 <25",
+    "pnpm": ">=10"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "typescript": "^5.8.3"
+  }
+}
