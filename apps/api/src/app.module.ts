@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { DatabaseHealthService } from './database/database-health.service';
+import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -9,8 +9,8 @@ import { HealthController } from './health.controller';
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
+    DatabaseModule,
   ],
   controllers: [HealthController],
-  providers: [DatabaseHealthService],
 })
 export class AppModule {}
