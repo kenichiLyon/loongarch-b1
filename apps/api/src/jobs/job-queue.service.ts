@@ -1,8 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type { PoolClient, QueryResultRow } from 'pg';
 import { DatabaseService } from '../database/database.service';
+import { addEqualityFilter, clampQueryLimit } from '../database/sql-query.helpers';
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+export type JobType = 'parse_artifact' | 'evaluate_submission' | 'export_report';
 
 export interface JobRow extends QueryResultRow {
   id: string;
@@ -20,9 +22,17 @@ export interface JobRow extends QueryResultRow {
 }
 
 export interface ClaimJobsOptions {
-  jobType: string;
+  jobType: JobType;
   workerId: string;
   limit: number;
+}
+
+export interface ListJobsFilters {
+  jobType?: JobType;
+  status?: JobStatus;
+  submissionId?: string;
+  artifactId?: string;
+  limit?: number;
 }
 
 @Injectable()
@@ -75,6 +85,26 @@ export class JobQueueService {
     );
     return result.rows.length;
   }
+
+  async listJobs(filters: ListJobsFilters) {
+    const query = buildListJobsSql(filters);
+    const result = await this.database.query<JobRow>(query.sql, query.params);
+    return result.rows;
+  }
+
+  async getJob(jobId: string) {
+    const result = await this.database.query<JobRow>(
+      `${selectJobColumnsSql()}
+        WHERE id = $1`,
+      [jobId],
+    );
+
+    const job = result.rows[0];
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+    return job;
+  }
 }
 
 export function buildClaimJobsSql() {
@@ -93,4 +123,39 @@ export function buildClaimJobsSql() {
            RETURNING id, job_type AS "jobType", payload, status, attempts, max_attempts AS "maxAttempts",
                      run_after AS "runAfter", locked_at AS "lockedAt", locked_by AS "lockedBy",
                      error_message AS "errorMessage", created_at AS "createdAt", updated_at AS "updatedAt"`;
+}
+
+export function buildListJobsSql(filters: ListJobsFilters) {
+  const params: unknown[] = [];
+  const where: string[] = [];
+
+  addEqualityFilter(where, params, 'job_type', filters.jobType);
+  addEqualityFilter(where, params, 'status', filters.status);
+
+  if (filters.submissionId) {
+    params.push(filters.submissionId);
+    where.push(`payload->>'submissionId' = $${params.length}`);
+  }
+
+  if (filters.artifactId) {
+    params.push(filters.artifactId);
+    where.push(`payload->>'artifactId' = $${params.length}`);
+  }
+
+  params.push(clampQueryLimit(filters.limit));
+
+  return {
+    sql: `${selectJobColumnsSql()}
+        ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+        ORDER BY created_at DESC
+        LIMIT $${params.length}`,
+    params,
+  };
+}
+
+function selectJobColumnsSql() {
+  return `SELECT id, job_type AS "jobType", payload, status, attempts, max_attempts AS "maxAttempts",
+                 run_after AS "runAfter", locked_at AS "lockedAt", locked_by AS "lockedBy",
+                 error_message AS "errorMessage", created_at AS "createdAt", updated_at AS "updatedAt"
+            FROM jobs`;
 }

@@ -11,12 +11,17 @@
 - worker 每次按 `JOB_BATCH_SIZE` 批量领取任务，失败后按 `JOB_RETRY_DELAY_SECONDS` 延迟重试，超过 `max_attempts` 后标记失败。
 - `JOB_STALE_AFTER_SECONDS` 用于释放崩溃 worker 遗留的 `running` 任务，避免永久卡死。
 - 文本解析通过 `PARSER_MAX_TEXT_CHARS` 截断，避免超大文本拖垮单个 worker。
+- 上传和解析结果写入审计日志；写入发生在同一数据库事务内，保证排障时可以关联业务状态和操作记录。
+- 管理员/教师可通过 `GET /jobs` 查询异步任务，通过 `GET /audit-logs` 查询处理留痕；接口单次最多返回 200 条，避免状态页拖垮数据库。
 
 ## 数据库并发要点
 
 - `idx_jobs_claim_queue`：优化 `job_type + status + run_after + created_at` 的任务领取查询。
 - `idx_jobs_running_locked`：优化 stale running job 释放。
 - `idx_artifacts_status_submission`：优化提交物状态聚合和提交状态推进。
+- `idx_jobs_type_status_updated`：优化教师端按任务类型和状态排查队列。
+- `idx_jobs_payload_submission`、`idx_jobs_payload_artifact`：优化通过提交或成果定位解析任务。
+- `idx_audit_logs_action_created`、`idx_audit_logs_actor_created`：优化审计日志按动作和操作者筛选。
 - API 连接池由 `DATABASE_POOL_MAX` 控制；部署时应按 CPU、PostgreSQL max_connections 和 worker 数量共同设置。
 
 ## 推荐部署方式
@@ -46,3 +51,4 @@ JOB_WORKER_ID=parse-worker-1 JOB_BATCH_SIZE=5 pnpm worker:parse
 - 解析 worker 拆分为 Word/PDF/OCR/代码包不同队列，避免重任务阻塞轻任务。
 - 对本地对象存储增加孤儿文件清理任务。
 - 增加 Prometheus 指标：队列长度、任务耗时、失败率、重试次数、worker 心跳。
+- 对 `audit_logs` 和历史 `jobs` 增加按学期归档/清理策略，防止长期运行后表膨胀。

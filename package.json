@@ -9,10 +9,12 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint . --max-warnings=0",
-    "test": "pnpm -r test",
+    "test": "pnpm -r test && pnpm test:scripts",
+    "test:scripts": "node --test scripts/*.test.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm build",
     "db:migrate": "pnpm --filter @loongarch-b1/api db:migrate",
-    "worker:parse": "pnpm --filter @loongarch-b1/api worker:parse"
+    "worker:parse": "pnpm --filter @loongarch-b1/api worker:parse",
+    "risk:loongarch": "node scripts/loongarch-dependency-risk.mjs --write docs/LOONGARCH_DEPENDENCY_RISK.md"
   },
   "engines": {
     "node": ">=22 <25",
