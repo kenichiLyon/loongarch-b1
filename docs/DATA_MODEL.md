@@ -48,7 +48,7 @@
 - 一个实训任务属于一门课程，并绑定一个评价模板版本。
 - 一个学生对同一实训任务允许多次提交，但只能有一个当前有效提交。
 - 一个提交包含多个成果文件，一个成果文件可以产生多个解析片段。
-- 一个提交最多有一个当前评价结果；评价结果包含多条指标得分和核查发现。
+- 一个提交最多有一个当前评价结果；评价结果包含多条指标得分和核查发现，AI 草稿可被重新生成但最终教师分不能被后台覆盖。
 - 报表导出记录操作者、筛选条件、生成状态和对象存储 key。
 - 后台任务通过 `jobs.run_after`、`locked_at`、`locked_by`、`attempts` 和 `max_attempts` 支持延迟重试、多 worker 并发领取和崩溃恢复。
 - 审计日志通过 `action`、`entity_type`、`entity_id` 和 `detail_json` 关联上传、解析、LLM、改分、发布和导出等关键操作。
@@ -62,7 +62,8 @@
 - 审计端追踪某次教师改分、LLM 调用或报表导出。
 - 教师/管理员按任务类型、任务状态、提交 ID 或成果 ID 排查异步任务。
 - 教师/管理员按动作、实体或操作者筛选审计日志，定位上传与解析链路问题。
+- 教师查看单个提交的 AI 初评草稿、指标分、置信度、核查发现和 LLM 调用留痕。
 
 ## 6. 迁移脚本
 
-初版 SQL 位于 `apps/api/migrations/001_initial_schema.sql`。并发任务索引位于 `apps/api/migrations/002_job_queue_concurrency.sql`。审计与任务状态查询索引位于 `apps/api/migrations/003_audit_and_job_status_indexes.sql`。迁移脚本只定义数据库结构，不写入演示数据；演示数据后续放在 `fixtures/demo-data`。
+初版 SQL 位于 `apps/api/migrations/001_initial_schema.sql`。并发任务索引位于 `apps/api/migrations/002_job_queue_concurrency.sql`。审计与任务状态查询索引位于 `apps/api/migrations/003_audit_and_job_status_indexes.sql`。评价 worker、LLM 调用和核查发现查询索引位于 `apps/api/migrations/004_evaluation_worker_indexes.sql`。迁移脚本只定义数据库结构，不写入演示数据；演示数据后续放在 `fixtures/demo-data`。

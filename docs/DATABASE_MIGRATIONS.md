@@ -32,3 +32,4 @@ pnpm db:migrate
 - `001_initial_schema.sql`：创建用户、课程、提交、成果、评价、报表、任务和审计等核心表。
 - `002_job_queue_concurrency.sql`：补充任务领取、stale running job 释放和 artifact 状态查询所需索引，支撑多 worker 并发消费。
 - `003_audit_and_job_status_indexes.sql`：补充任务状态查询、payload 中 submission/artifact 定位和审计日志筛选索引，支撑教师端高并发排障。
+- `004_evaluation_worker_indexes.sql`：补充 LLM 调用追踪、AI 草稿状态和核查发现统计索引，支撑评价 worker 与教师复核。

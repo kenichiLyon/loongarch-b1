@@ -105,9 +105,13 @@ JOB_BATCH_SIZE=5
 JOB_POLL_INTERVAL_MS=2000
 JOB_RETRY_DELAY_SECONDS=30
 JOB_STALE_AFTER_SECONDS=900
+EVALUATION_MAX_CONTEXT_CHARS=24000
+EVALUATION_PROMPT_VERSION=evaluation-v1
+LLM_PROVIDER=cloud
 LLM_BASE_URL=https://example.invalid/v1
 LLM_API_KEY=
 LLM_MODEL=
+LLM_TIMEOUT_MS=30000
 ```
 
 `AUTH_TOKEN_SECRET`、`AUTH_BOOTSTRAP_TOKEN`、`LLM_API_KEY` 不得提交生产真实值；云端调用前必须执行脱敏摘要策略。
@@ -144,6 +148,16 @@ JOB_RUN_ONCE=true pnpm worker:parse
 
 生产部署可启动多个 worker 实例并发消费；任务领取使用 PostgreSQL `FOR UPDATE SKIP LOCKED` 避免重复处理。
 
+### 评价 Worker
+
+解析完成后系统会自动创建 `evaluate_submission` 任务。评价 worker 先构建脱敏证据摘要，再通过 OpenAI-compatible LLM Gateway 执行 JSON 初评；如果未配置 `LLM_BASE_URL`/`LLM_MODEL`，系统会生成“需教师人工复核”的 AI 草稿并进入教师复核状态，避免任务永久阻塞。
+
+```bash
+JOB_RUN_ONCE=true pnpm worker:evaluate
+```
+
+`LLM_PROVIDER=cloud|local` 用于标记云端或本地/局域网模型服务；本地服务可不配置 `LLM_API_KEY`，但必须提供 OpenAI-compatible `/chat/completions` 接口。
+
 当前脚手架验证目标：
 
 - NestJS 后端 TypeScript 编译通过。
@@ -167,6 +181,7 @@ JOB_RUN_ONCE=true pnpm worker:parse
 - `POST /submissions/:submissionId/artifacts/upload`
 - `GET /jobs`、`GET /jobs/:jobId`：管理员/教师查看解析、评价、报表异步任务状态
 - `GET /audit-logs`：管理员/教师按动作、实体、操作者筛选审计日志
+- `GET /evaluations/submissions/:submissionId`：管理员/教师查看 AI 初评草稿、指标分和核查发现
 
 除健康检查和登录/初始化接口外，基础管理接口均需要 Bearer Token；管理员可创建用户，管理员/教师可维护课程、班级、评价模板和实训任务。
 
@@ -199,7 +214,7 @@ curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
 
 `UPLOAD_MAX_BYTES` 控制单文件大小，当前支持 `word`、`pdf`、`image`、`code_archive`、`other` 文件类型；`git_link` 将使用后续专用入口。上传使用磁盘临时文件，避免高并发时把完整文件压在 Node.js 内存中。
 
-上传成功会写入 `artifact.uploaded` 审计日志；解析 worker 成功/失败会写入 `artifact.parse_succeeded` 或 `artifact.parse_failed`。管理员/教师可用 `GET /jobs?jobType=parse_artifact&submissionId=<id>` 定位异步任务进度，用 `GET /audit-logs?entityType=artifact&entityId=<id>` 查看处理留痕。
+上传成功会写入 `artifact.uploaded` 审计日志；解析 worker 成功/失败会写入 `artifact.parse_succeeded` 或 `artifact.parse_failed`。解析完成会自动排队 `evaluate_submission` 任务。管理员/教师可用 `GET /jobs?jobType=parse_artifact&submissionId=<id>` 定位异步任务进度，用 `GET /audit-logs?entityType=artifact&entityId=<id>` 查看处理留痕。
 
 ## 7. 核心业务流程
 
@@ -209,7 +224,7 @@ curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
 4. 系统保存成果并创建解析任务。
 5. 解析器提取文本、截图信息、代码结构和文件元数据。
 6. 规则引擎检查提交完整性、步骤覆盖、格式规范和明显风险。
-7. LLM Gateway 使用脱敏摘要生成初评建议、证据、扣分点和置信度。
+7. LLM Gateway 使用脱敏摘要生成 JSON 初评建议、证据、扣分点和置信度。
 8. 教师逐项复核、改分、写评语并确认最终成绩。
 9. 系统生成学生报告和课程/班级统计报表，支持 Excel/PDF 导出。
 
@@ -218,7 +233,7 @@ curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
 - 所有 LLM 调用必须通过统一 `LLM Gateway`。
 - 支持云端 OpenAI-compatible API，也支持本地或局域网模型服务。
 - 默认只发送脱敏摘要和必要证据片段，不发送原始文件。
-- LLM 输出必须符合后端 JSON Schema，失败时重试或进入教师待复核。
+- LLM 输出必须符合后端 JSON Schema，失败时通过 `evaluate_submission` 任务重试，最终失败会留痕并进入人工处理。
 - Prompt 中系统评分规则优先，上传内容不得覆盖系统规则。
 
 ## 9. LoongArch 与银河麒麟适配
@@ -253,7 +268,7 @@ pnpm risk:loongarch
 
 - API 上传链路：文件先落磁盘临时区，再写入本地 ObjectStore，数据库只保存元数据。
 - 异步任务：上传后创建 `jobs`，解析 worker 独立消费，避免请求线程执行重解析。
-- 并发领取：worker 使用 `FOR UPDATE SKIP LOCKED` 批量领取任务，支持多实例横向扩展。
+- 并发领取：解析 worker 与评价 worker 使用 `FOR UPDATE SKIP LOCKED` 批量领取任务，支持多实例横向扩展。
 - 失败治理：任务失败会延迟重试，超出 `max_attempts` 后进入失败状态；stale running job 会被释放回队列。
 - 运行可观测：`GET /jobs` 和 `GET /audit-logs` 均限制单次返回数量，并使用 PostgreSQL 索引支撑教师端排查。
 - 详细策略见 `docs/CONCURRENCY.md`。
@@ -290,9 +305,10 @@ pnpm risk:loongarch
 - LoongArch 依赖风险扫描脚本、生成报告和脚本单元测试。
 - 上传/解析审计日志、教师/管理员任务状态查询 API 和相关索引。
 - CI 已纳入仓库脚本测试，保证 LoongArch 风险扫描逻辑随 PR 自动验证。
+- OpenAI-compatible LLM Gateway、脱敏证据摘要、JSON 初评校验、评价 worker 和 AI 草稿落库。
 
 下一步：
 
 1. 扩展 Word/PDF/OCR/代码包真实解析器与解析回归样例。
-2. 接入 LLM Gateway、脱敏摘要和 JSON Schema 校验。
-3. 前端补齐登录、任务状态与审计日志管理页面。
+2. 补齐规则核查引擎和教师复核改分接口。
+3. 前端补齐登录、任务状态、审计日志和 AI 初评查看页面。
