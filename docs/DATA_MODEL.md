@@ -51,6 +51,7 @@
 - 一个提交最多有一个当前评价结果；评价结果包含多条指标得分和核查发现。
 - 报表导出记录操作者、筛选条件、生成状态和对象存储 key。
 - 后台任务通过 `jobs.run_after`、`locked_at`、`locked_by`、`attempts` 和 `max_attempts` 支持延迟重试、多 worker 并发领取和崩溃恢复。
+- 审计日志通过 `action`、`entity_type`、`entity_id` 和 `detail_json` 关联上传、解析、LLM、改分、发布和导出等关键操作。
 
 ## 5. 首版查询场景
 
@@ -59,7 +60,9 @@
 - 教师打开单个提交，查看成果文件、解析证据、AI 初评、核查发现并复核。
 - 管理端按课程生成班级分布、指标均值、常见问题 Top N 和导出文件。
 - 审计端追踪某次教师改分、LLM 调用或报表导出。
+- 教师/管理员按任务类型、任务状态、提交 ID 或成果 ID 排查异步任务。
+- 教师/管理员按动作、实体或操作者筛选审计日志，定位上传与解析链路问题。
 
 ## 6. 迁移脚本
 
-初版 SQL 位于 `apps/api/migrations/001_initial_schema.sql`。并发任务索引位于 `apps/api/migrations/002_job_queue_concurrency.sql`。迁移脚本只定义数据库结构，不写入演示数据；演示数据后续放在 `fixtures/demo-data`。
+初版 SQL 位于 `apps/api/migrations/001_initial_schema.sql`。并发任务索引位于 `apps/api/migrations/002_job_queue_concurrency.sql`。审计与任务状态查询索引位于 `apps/api/migrations/003_audit_and_job_status_indexes.sql`。迁移脚本只定义数据库结构，不写入演示数据；演示数据后续放在 `fixtures/demo-data`。

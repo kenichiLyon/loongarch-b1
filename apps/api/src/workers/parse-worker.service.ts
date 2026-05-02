@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient, QueryResultRow } from 'pg';
+import { AuditService } from '../audit/audit.service';
 import { DatabaseService } from '../database/database.service';
 import { ArtifactKind } from '../domain/core';
 import { JobQueueService, type JobRow } from '../jobs/job-queue.service';
@@ -32,6 +33,7 @@ export class ParseWorkerService {
     private readonly database: DatabaseService,
     private readonly jobQueue: JobQueueService,
     private readonly objectStore: LocalObjectStoreService,
+    private readonly auditService: AuditService,
   ) {}
 
   async processBatch(options: ParseWorkerOptions): Promise<ParseWorkerResult> {
@@ -98,6 +100,19 @@ export class ParseWorkerService {
       );
 
       await this.jobQueue.markSucceeded(client, job.id);
+
+      await this.auditService.record({
+        action: 'artifact.parse_succeeded',
+        entityType: 'artifact',
+        entityId: artifact.id,
+        detail: {
+          submissionId: artifact.submissionId,
+          jobId: job.id,
+          workerId: job.lockedBy,
+          contentCount: drafts.length,
+        },
+        client,
+      });
     });
   }
 
@@ -127,6 +142,21 @@ export class ParseWorkerService {
       }
 
       await this.jobQueue.markFailed(client, job, message, retryDelaySeconds);
+
+      await this.auditService.record({
+        action: payload?.artifactId ? 'artifact.parse_failed' : 'job.parse_failed',
+        entityType: payload?.artifactId ? 'artifact' : 'job',
+        entityId: payload?.artifactId ?? job.id,
+        detail: {
+          submissionId: payload?.submissionId ?? null,
+          jobId: job.id,
+          attempts: job.attempts,
+          maxAttempts: job.maxAttempts,
+          retryScheduled: job.attempts < job.maxAttempts,
+          errorMessage: message,
+        },
+        client,
+      });
     });
   }
 

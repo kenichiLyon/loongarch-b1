@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { unlink } from 'node:fs/promises';
 import type { PoolClient, QueryResultRow } from 'pg';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { AuditService } from '../audit/audit.service';
 import { DatabaseService } from '../database/database.service';
 import { ArtifactKind, UserRole } from '../domain/core';
 import { LocalObjectStoreService } from '../storage/local-object-store.service';
@@ -39,6 +40,7 @@ export class SubmissionsService {
   constructor(
     private readonly database: DatabaseService,
     private readonly objectStore: LocalObjectStoreService,
+    private readonly auditService: AuditService,
   ) {}
 
   async listSubmissions(filters: { experimentId?: string; studentId?: string }, user: AuthenticatedUser) {
@@ -117,6 +119,23 @@ export class SubmissionsService {
             WHERE id = $1`,
           [submission.id],
         );
+
+        await this.auditService.record({
+          actorId: user.id,
+          action: 'artifact.uploaded',
+          entityType: 'artifact',
+          entityId: artifact.id,
+          detail: {
+            submissionId: submission.id,
+            kind: artifact.kind,
+            originalName: artifact.originalName,
+            mimeType: artifact.mimeType,
+            sizeBytes: Number(artifact.sizeBytes),
+            sha256: artifact.sha256,
+            queuedJobType: 'parse_artifact',
+          },
+          client,
+        });
 
         return artifact;
       });

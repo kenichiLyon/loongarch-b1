@@ -55,6 +55,7 @@ docs/
   DATABASE_MIGRATIONS.md       数据库迁移说明
   DEPENDENCY_POLICY.md         依赖锁定策略
   LOONGARCH_COMPATIBILITY.md   LoongArch/银河麒麟兼容性清单
+  LOONGARCH_DEPENDENCY_RISK.md LoongArch lockfile 风险扫描报告
   RELEASE.md                   CD 自动构建产物发布说明
   ROADMAP.md                   12 周交付路线图
   SECURITY.md                  安全与合规基线
@@ -127,8 +128,10 @@ pnpm dev
 
 ```bash
 pnpm --filter @loongarch-b1/api test
+pnpm test:scripts
 pnpm lint
 pnpm build
+pnpm risk:loongarch
 ```
 
 ### 解析 Worker
@@ -162,6 +165,8 @@ JOB_RUN_ONCE=true pnpm worker:parse
 - `GET /experiments`、`POST /experiments`
 - `GET /submissions`、`POST /submissions`
 - `POST /submissions/:submissionId/artifacts/upload`
+- `GET /jobs`、`GET /jobs/:jobId`：管理员/教师查看解析、评价、报表异步任务状态
+- `GET /audit-logs`：管理员/教师按动作、实体、操作者筛选审计日志
 
 除健康检查和登录/初始化接口外，基础管理接口均需要 Bearer Token；管理员可创建用户，管理员/教师可维护课程、班级、评价模板和实训任务。
 
@@ -194,6 +199,8 @@ curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
 
 `UPLOAD_MAX_BYTES` 控制单文件大小，当前支持 `word`、`pdf`、`image`、`code_archive`、`other` 文件类型；`git_link` 将使用后续专用入口。上传使用磁盘临时文件，避免高并发时把完整文件压在 Node.js 内存中。
 
+上传成功会写入 `artifact.uploaded` 审计日志；解析 worker 成功/失败会写入 `artifact.parse_succeeded` 或 `artifact.parse_failed`。管理员/教师可用 `GET /jobs?jobType=parse_artifact&submissionId=<id>` 定位异步任务进度，用 `GET /audit-logs?entityType=artifact&entityId=<id>` 查看处理留痕。
+
 ## 7. 核心业务流程
 
 1. 管理员创建用户、班级、课程。
@@ -225,7 +232,13 @@ curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
 - Docker/Podman 基础镜像是否支持 LoongArch。
 - 不可用能力的降级策略和人工处理入口。
 
-详见 `docs/LOONGARCH_COMPATIBILITY.md`。
+依赖风险扫描使用：
+
+```bash
+pnpm risk:loongarch
+```
+
+扫描结果写入 `docs/LOONGARCH_DEPENDENCY_RISK.md`。当前 lockfile 扫描为 381 个包、0 个高风险、30 个中风险、64 个低风险；中风险主要集中在 Linux 平台限定的 esbuild/rollup 可选构建包。详见 `docs/LOONGARCH_COMPATIBILITY.md` 和 `docs/DEPENDENCY_POLICY.md`。
 
 ## 10. 自动构建与发布
 
@@ -242,6 +255,7 @@ curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
 - 异步任务：上传后创建 `jobs`，解析 worker 独立消费，避免请求线程执行重解析。
 - 并发领取：worker 使用 `FOR UPDATE SKIP LOCKED` 批量领取任务，支持多实例横向扩展。
 - 失败治理：任务失败会延迟重试，超出 `max_attempts` 后进入失败状态；stale running job 会被释放回队列。
+- 运行可观测：`GET /jobs` 和 `GET /audit-logs` 均限制单次返回数量，并使用 PostgreSQL 索引支撑教师端排查。
 - 详细策略见 `docs/CONCURRENCY.md`。
 
 ## 12. 版本控制纪律
@@ -273,9 +287,12 @@ curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
 - ESLint、CI/CD lint gate 与 Sourcery AI 自动代码审核入口。
 - 学生提交记录、本地 ObjectStore 文件上传、artifacts 入库和解析任务排队。
 - 高并发安全的 PostgreSQL job claiming、解析 worker、`extracted_contents` 写入和任务重试/释放机制。
+- LoongArch 依赖风险扫描脚本、生成报告和脚本单元测试。
+- 上传/解析审计日志、教师/管理员任务状态查询 API 和相关索引。
+- CI 已纳入仓库脚本测试，保证 LoongArch 风险扫描逻辑随 PR 自动验证。
 
 下一步：
 
-1. 前置验证 LoongArch 关键依赖风险扫描脚本。
-2. 接入上传/解析审计日志与教师可见的任务状态页。
-3. 扩展 Word/PDF/OCR/代码包真实解析器与解析回归样例。
+1. 扩展 Word/PDF/OCR/代码包真实解析器与解析回归样例。
+2. 接入 LLM Gateway、脱敏摘要和 JSON Schema 校验。
+3. 前端补齐登录、任务状态与审计日志管理页面。

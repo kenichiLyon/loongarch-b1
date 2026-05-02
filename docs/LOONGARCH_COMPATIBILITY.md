@@ -12,6 +12,7 @@
 - PostgreSQL 安装、初始化、备份与恢复。
 - 前端静态资源构建产物在 Nginx 或后端静态服务中的运行情况。
 - PDF/Word/Excel 解析和导出相关依赖是否包含 native binary。
+- 每次新增依赖后执行 `pnpm risk:loongarch`，并将 `docs/LOONGARCH_DEPENDENCY_RISK.md` 纳入 PR 审查。
 - PDF 中文字体路径、字体授权和嵌入效果。
 - OCR/Office 转换等可选能力是否可用，以及不可用时的降级路径。
 - Docker/Podman 基础镜像是否支持 LoongArch。
@@ -41,5 +42,18 @@
 - 变更：新增 `pnpm worker:parse`、PostgreSQL `FOR UPDATE SKIP LOCKED` 任务领取、失败重试、stale running job 释放和解析内容入库。
 - 依赖：仅使用 Node.js 内置文件系统/crypto 与 PostgreSQL 行锁能力，未新增第三方运行时依赖。
 - 影响：目标环境需验证 PostgreSQL 版本支持 `SKIP LOCKED`，并按 worker 数量调整 `DATABASE_POOL_MAX`、PostgreSQL `max_connections` 和 `STORAGE_ROOT` IO 能力。
+
+### 2026-05-02：LoongArch 依赖风险扫描
+
+- 变更：新增 `pnpm risk:loongarch`，从 `pnpm-lock.yaml` 扫描 CPU/OS 过滤、构建脚本、CLI binary、optional dependency 和常见 native 包族，生成 `docs/LOONGARCH_DEPENDENCY_RISK.md`。
+- 依赖：扫描脚本仅使用 Node.js 内置模块，未新增运行时或开发依赖。
+- 当前结果：381 个包，0 个高风险、30 个中风险、64 个低风险；中风险主要为 Linux 平台限定的 esbuild/rollup optional 包和构建 CLI。
+- 影响：目标环境仍需执行 `pnpm install --frozen-lockfile`、`pnpm build`、`pnpm --filter @loongarch-b1/api test`，确认 linux-loong64 optional 包安装路径和构建行为。
+
+### 2026-05-02：审计日志与任务状态查询
+
+- 变更：上传与解析 worker 写入 `audit_logs`，管理员/教师可通过 `GET /jobs`、`GET /audit-logs` 排查异步任务状态和处理留痕。
+- 依赖：仅复用 PostgreSQL 表、JSONB 字段和 B-tree/表达式索引，未新增第三方依赖。
+- 影响：高并发上传时审计写入与业务事务一致；目标环境需观察 `audit_logs` 增长量并按课程周期制定归档策略。
 
 后续每次发现平台差异时，在本文件追加：验证日期、目标环境版本、依赖版本、测试命令、结果和替代方案。

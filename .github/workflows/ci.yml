@@ -38,6 +38,9 @@ jobs:
       - name: Run API tests
         run: pnpm --filter @loongarch-b1/api test
 
+      - name: Run repository script tests
+        run: pnpm test:scripts
+
       - name: Build workspace
         run: pnpm build
 
