@@ -30,6 +30,7 @@
 
 - 每个会修改仓库内容的工作单元都必须形成 GitHub 远端 commit。
 - 优先使用 GitHub MCP 的 `push_files`、`create_or_update_file`、`create_branch`、`create_pull_request` 等工具提交远端变更。
+- 每次提交必须走 Pull Request 流程，并与 Sourcery AI review 互动；如 Sourcery AI 发现实质性问题必须修复后再合并，如判断无实质性问题则需在 PR 中说明证据和理由、说服 Sourcery AI 后再合并。
 - 禁止只在本地修改而不提交远端。
 - 每轮开发结束前必须确认远端仓库包含最新 commit。
 - 如果 GitHub MCP、网络或权限异常导致无法提交远端，必须停止后续开发并报告阻塞原因。
@@ -42,7 +43,7 @@
 - `develop`：日常集成分支，可在进入多人开发或复杂功能后启用。
 - `feature/<scope>`：功能开发分支，例如 `feature/project-scaffold`、`feature/upload-parser`。
 - `fix/<scope>`：缺陷修复分支。
-- 项目早期允许直接提交到 `main`；进入多人协作或高风险功能后必须改用 feature 分支 + PR。
+- 禁止直接提交到 `main`；所有修改必须通过 feature/fix/docs 分支提交 PR，经 CI/CD 与 Sourcery AI review 后合并。
 
 ### Commit Message 规范
 
