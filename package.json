@@ -10,7 +10,8 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
-    "check": "pnpm typecheck && pnpm build"
+    "check": "pnpm typecheck && pnpm build",
+    "db:migrate": "pnpm --filter @loongarch-b1/api db:migrate"
   },
   "engines": {
     "node": ">=22 <25",

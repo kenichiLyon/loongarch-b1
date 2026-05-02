@@ -51,6 +51,7 @@ apps/
 docs/
   ARCHITECTURE.md              架构概要
   DATA_MODEL.md                核心数据模型
+  DATABASE_MIGRATIONS.md       数据库迁移说明
   DEPENDENCY_POLICY.md         依赖锁定策略
   LOONGARCH_COMPATIBILITY.md   LoongArch/银河麒麟兼容性清单
   ROADMAP.md                   12 周交付路线图
@@ -173,9 +174,10 @@ pnpm build
 - 核心评价领域契约和权重校验测试。
 - 依赖精确版本、pnpm lockfile 和 CI 冻结安装。
 - 核心 PostgreSQL 数据模型和初始迁移脚本。
+- 数据库迁移执行命令与迁移校验测试。
 
 下一步：
 
-1. 实现数据库连接与迁移执行命令。
-2. 实现用户/角色/课程/班级/实训任务基础 API。
+1. 实现用户/角色/课程/班级/实训任务基础 API。
+2. 接入 PostgreSQL 查询层和配置校验。
 3. 前置验证 LoongArch 关键依赖风险。
