@@ -34,6 +34,8 @@
 | 审计日志 | `audit_logs` | 关键操作留痕 |
 | 后台任务 | `jobs` | 解析、评价、导出等异步任务 |
 
+`metric_scores.comments` 固定保存为 JSON 数组；当规则核查和 AI 初评都没有评论时保存 `[]`，便于前端按统一结构渲染。
+
 ## 3. 状态枚举
 
 - `submissions.status`：`draft`、`submitted`、`parsing`、`evaluating`、`teacher_review`、`published`、`failed`

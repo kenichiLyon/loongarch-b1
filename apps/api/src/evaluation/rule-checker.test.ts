@@ -53,6 +53,30 @@ test('flags missing requirements and incomplete steps', () => {
   assert.equal(result.findings.some((finding) => finding.type === 'step'), true);
 });
 
+test('detects numbered step lists before evidence normalization', () => {
+  const result = runDeterministicRuleCheck({
+    requirementText: '按步骤说明登录、导出和验证流程',
+    metrics: [
+      {
+        id: 'metric-1',
+        name: '步骤完整性',
+        description: '登录导出验证流程',
+        scoringRule: '',
+        maxScore: 100,
+      },
+    ],
+    evidence: [
+      {
+        sourceRef: 'report.md#text',
+        contentKind: 'text',
+        contentText: ['1. 打开登录页面并登录系统', '2. 导出报表并验证结果', '3. 记录测试结论'].join('\n'),
+      },
+    ],
+  });
+
+  assert.equal(result.findings.some((finding) => finding.type === 'step' && finding.severity === 'info'), true);
+});
+
 test('flags prompt injection and short evidence quality risks', () => {
   const result = runDeterministicRuleCheck({
     requirementText: '实现软件测试报告',

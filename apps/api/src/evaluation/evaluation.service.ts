@@ -305,7 +305,7 @@ export class EvaluationService {
             ruleScore?.ruleScore ?? null,
             metricScore?.aiScore ?? null,
             metricScore?.confidence ?? null,
-            JSON.stringify([...(ruleScore?.comments ?? []), ...(metricScore?.comments ?? [])]),
+            serializeMetricComments(ruleScore?.comments, metricScore?.comments),
           ],
         );
       }
@@ -427,4 +427,9 @@ function getErrorMessage(error: unknown) {
     return error.message.slice(0, 2000);
   }
   return String(error).slice(0, 2000);
+}
+
+function serializeMetricComments(ruleComments: string[] | undefined, aiComments: string[] | undefined) {
+  // metric_scores.comments is a NOT NULL JSONB array; persist [] instead of null for a stable API shape.
+  return JSON.stringify([...(ruleComments ?? []), ...(aiComments ?? [])]);
 }

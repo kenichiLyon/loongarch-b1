@@ -116,12 +116,13 @@ const chineseTechnicalTerms = [
 ];
 
 export function runDeterministicRuleCheck(input: RuleCheckInput): RuleCheckResult {
-  const evidenceText = normalizeText(input.evidence.map((item) => item.contentText).join('\n'));
+  const rawEvidenceText = input.evidence.map((item) => item.contentText).join('\n');
+  const evidenceText = normalizeText(rawEvidenceText);
   const textEvidence = input.evidence.filter((item) => item.contentKind === 'text' || item.contentKind === 'ocr');
   const findings: VerificationFinding[] = [];
 
   findings.push(...checkRequirementCoverage(input.requirementText, evidenceText));
-  findings.push(...checkStepCompleteness(input.requirementText, evidenceText));
+  findings.push(...checkStepCompleteness(input.requirementText, evidenceText, rawEvidenceText));
   findings.push(...checkEvidenceQuality(textEvidence));
   findings.push(...checkRiskPatterns(input.evidence));
 
@@ -190,11 +191,13 @@ function checkRequirementCoverage(requirementText: string, evidenceText: string)
   return findings;
 }
 
-function checkStepCompleteness(requirementText: string, evidenceText: string): VerificationFinding[] {
+function checkStepCompleteness(requirementText: string, evidenceText: string, rawEvidenceText: string): VerificationFinding[] {
   if (!/(步骤|流程|过程|step|procedure)/i.test(requirementText)) {
     return [];
   }
-  const stepMarkers = evidenceText.match(/(步骤|流程|过程|step|第[一二三四五六七八九十\d]+步|\n\s*\d+[.)、])/gi) ?? [];
+  const keywordMarkers = evidenceText.match(/(步骤|流程|过程|step|第[一二三四五六七八九十\d]+步)/gi) ?? [];
+  const numberedMarkers = rawEvidenceText.match(/(?:^|\n)\s*(?:\d+[.)、]|[（(]?\d+[）)]|第[一二三四五六七八九十\d]+步)/gim) ?? [];
+  const stepMarkers = [...keywordMarkers, ...numberedMarkers];
   if (stepMarkers.length >= 2) {
     return [
       {
