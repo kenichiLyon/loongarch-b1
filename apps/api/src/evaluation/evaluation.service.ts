@@ -10,6 +10,7 @@ import {
   type EvaluationDraft,
   type EvaluationMetricDefinition,
 } from './evaluation-output.schema';
+import { runDeterministicRuleCheck, type RuleCheckResult } from './rule-checker';
 
 interface SubmissionEvaluationContextRow extends QueryResultRow {
   submissionId: string;
@@ -53,6 +54,7 @@ interface MetricScoreRow extends QueryResultRow {
   id: string;
   rubricMetricId: string;
   metricName: string;
+  ruleScore: string | null;
   aiScore: string | null;
   teacherScore: string | null;
   finalScore: string | null;
@@ -92,6 +94,11 @@ export class EvaluationService {
 
   async evaluateSubmission(submissionId: string) {
     const context = await this.loadEvaluationContext(submissionId);
+    const ruleCheck = runDeterministicRuleCheck({
+      requirementText: context.submission.requirementText,
+      metrics: context.metrics,
+      evidence: context.evidence,
+    });
     const prompt = buildEvaluationPrompt({
       experimentTitle: context.submission.experimentTitle,
       requirementText: context.submission.requirementText,
@@ -107,6 +114,7 @@ export class EvaluationService {
         draft,
         promptVersion: prompt.promptVersion,
         llmResponse: null,
+        ruleCheck,
         skippedReason: reason,
       });
       return { submissionId, status: 'skipped', reason };
@@ -137,8 +145,14 @@ export class EvaluationService {
       draft,
       promptVersion: prompt.promptVersion,
       llmResponse,
+      ruleCheck,
     });
-    return { submissionId, status: 'ai_draft', metricScoreCount: draft.metricScores.length, findingCount: draft.findings.length };
+    return {
+      submissionId,
+      status: 'ai_draft',
+      metricScoreCount: context.metrics.length,
+      findingCount: draft.findings.length + ruleCheck.findings.length,
+    };
   }
 
   async getEvaluation(submissionId: string): Promise<unknown> {
@@ -165,8 +179,8 @@ export class EvaluationService {
 
     const metricScores = await this.database.query<MetricScoreRow>(
       `SELECT ms.id, ms.rubric_metric_id AS "rubricMetricId", rm.name AS "metricName",
-              ms.ai_score AS "aiScore", ms.teacher_score AS "teacherScore", ms.final_score AS "finalScore",
-              ms.confidence, ms.comments
+              ms.rule_score AS "ruleScore", ms.ai_score AS "aiScore", ms.teacher_score AS "teacherScore",
+              ms.final_score AS "finalScore", ms.confidence, ms.comments
          FROM metric_scores ms
          JOIN rubric_metrics rm ON rm.id = ms.rubric_metric_id
         WHERE ms.evaluation_result_id = $1
@@ -269,6 +283,7 @@ export class EvaluationService {
     draft: EvaluationDraft;
     promptVersion: string;
     llmResponse: LlmJsonResponse | null;
+    ruleCheck: RuleCheckResult;
     skippedReason?: string;
   }) {
     await this.database.withTransaction(async (client) => {
@@ -276,21 +291,26 @@ export class EvaluationService {
       await client.query('DELETE FROM metric_scores WHERE evaluation_result_id = $1', [evaluation.id]);
       await client.query('DELETE FROM verification_findings WHERE evaluation_result_id = $1', [evaluation.id]);
 
-      for (const metricScore of input.draft.metricScores) {
+      const ruleScoreByMetricId = new Map(input.ruleCheck.metricScores.map((score) => [score.metricId, score]));
+      const aiScoreByMetricId = new Map(input.draft.metricScores.map((score) => [score.metricId, score]));
+      for (const metric of input.context.metrics) {
+        const metricScore = aiScoreByMetricId.get(metric.id);
+        const ruleScore = ruleScoreByMetricId.get(metric.id);
         await client.query(
-          `INSERT INTO metric_scores (evaluation_result_id, rubric_metric_id, ai_score, confidence, comments)
-           VALUES ($1, $2, $3, $4, $5::jsonb)`,
+          `INSERT INTO metric_scores (evaluation_result_id, rubric_metric_id, rule_score, ai_score, confidence, comments)
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
           [
             evaluation.id,
-            metricScore.metricId,
-            metricScore.aiScore,
-            metricScore.confidence,
-            JSON.stringify(metricScore.comments),
+            metric.id,
+            ruleScore?.ruleScore ?? null,
+            metricScore?.aiScore ?? null,
+            metricScore?.confidence ?? null,
+            serializeMetricComments(ruleScore?.comments, metricScore?.comments),
           ],
         );
       }
 
-      for (const finding of input.draft.findings) {
+      for (const finding of [...input.ruleCheck.findings, ...input.draft.findings]) {
         await client.query(
           `INSERT INTO verification_findings (evaluation_result_id, finding_type, severity, evidence, suggestion, source_ref)
            VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -326,8 +346,9 @@ export class EvaluationService {
           promptVersion: input.promptVersion,
           provider: input.llmResponse?.provider ?? null,
           modelName: input.llmResponse?.modelName ?? null,
-          metricScoreCount: input.draft.metricScores.length,
-          findingCount: input.draft.findings.length,
+          metricScoreCount: input.context.metrics.length,
+          findingCount: input.draft.findings.length + input.ruleCheck.findings.length,
+          ruleFindingCount: input.ruleCheck.findings.length,
           skippedReason: input.skippedReason ?? null,
         },
         client,
@@ -406,4 +427,9 @@ function getErrorMessage(error: unknown) {
     return error.message.slice(0, 2000);
   }
   return String(error).slice(0, 2000);
+}
+
+function serializeMetricComments(ruleComments: string[] | undefined, aiComments: string[] | undefined) {
+  // metric_scores.comments is a NOT NULL JSONB array; persist [] instead of null for a stable API shape.
+  return JSON.stringify([...(ruleComments ?? []), ...(aiComments ?? [])]);
 }

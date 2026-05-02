@@ -150,7 +150,7 @@ JOB_RUN_ONCE=true pnpm worker:parse
 
 ### 评价 Worker
 
-解析完成后系统会自动创建 `evaluate_submission` 任务。评价 worker 先构建脱敏证据摘要，再通过 OpenAI-compatible LLM Gateway 执行 JSON 初评；如果未配置 `LLM_BASE_URL`/`LLM_MODEL`，系统会生成“需教师人工复核”的 AI 草稿并进入教师复核状态，避免任务永久阻塞。
+解析完成后系统会自动创建 `evaluate_submission` 任务。评价 worker 会先运行确定性规则核查，写入 `rule_score` 与核查发现；随后构建脱敏证据摘要并通过 OpenAI-compatible LLM Gateway 执行 JSON 初评。如果未配置 `LLM_BASE_URL`/`LLM_MODEL`，系统仍会保留规则核查结果，并生成“需教师人工复核”的 AI 草稿进入教师复核状态，避免任务永久阻塞。
 
 ```bash
 JOB_RUN_ONCE=true pnpm worker:evaluate
@@ -306,9 +306,10 @@ pnpm risk:loongarch
 - 上传/解析审计日志、教师/管理员任务状态查询 API 和相关索引。
 - CI 已纳入仓库脚本测试，保证 LoongArch 风险扫描逻辑随 PR 自动验证。
 - OpenAI-compatible LLM Gateway、脱敏证据摘要、JSON 初评校验、评价 worker 和 AI 草稿落库。
+- 确定性规则核查基础能力：需求覆盖、步骤完整性、文档证据质量、异常/Prompt Injection 风险识别和指标 `rule_score` 落库。
 
 下一步：
 
 1. 扩展 Word/PDF/OCR/代码包真实解析器与解析回归样例。
-2. 补齐规则核查引擎和教师复核改分接口。
+2. 补齐教师复核改分、确认发布和学生反馈查看接口。
 3. 前端补齐登录、任务状态、审计日志和 AI 初评查看页面。
