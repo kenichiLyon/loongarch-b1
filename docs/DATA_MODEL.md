@@ -34,7 +34,7 @@
 | 审计日志 | `audit_logs` | 关键操作留痕 |
 | 后台任务 | `jobs` | 解析、评价、导出等异步任务 |
 
-`metric_scores.comments` 固定保存为 JSON 数组；当规则核查和 AI 初评都没有评论时保存 `[]`，便于前端按统一结构渲染。
+`metric_scores.comments` 固定保存为 JSON 数组；当规则核查、AI 初评和教师复核都没有评论时保存 `[]`，便于前端按统一结构渲染。
 
 ## 3. 状态枚举
 
@@ -51,6 +51,7 @@
 - 一个学生对同一实训任务允许多次提交，但只能有一个当前有效提交。
 - 一个提交包含多个成果文件，一个成果文件可以产生多个解析片段。
 - 一个提交最多有一个当前评价结果；评价结果包含多条指标得分和核查发现，规则分与 AI 草稿可被重新生成但最终教师分不能被后台覆盖。
+- 教师复核会写入 `metric_scores.teacher_score`、`metric_scores.final_score`、`evaluation_results.final_score`、`confirmed_by` 和 `confirmed_at`；发布时写入 `published_at` 并把提交状态置为 `published`。
 - 报表导出记录操作者、筛选条件、生成状态和对象存储 key。
 - 后台任务通过 `jobs.run_after`、`locked_at`、`locked_by`、`attempts` 和 `max_attempts` 支持延迟重试、多 worker 并发领取和崩溃恢复。
 - 审计日志通过 `action`、`entity_type`、`entity_id` 和 `detail_json` 关联上传、解析、LLM、改分、发布和导出等关键操作。
@@ -65,6 +66,7 @@
 - 教师/管理员按任务类型、任务状态、提交 ID 或成果 ID 排查异步任务。
 - 教师/管理员按动作、实体或操作者筛选审计日志，定位上传与解析链路问题。
 - 教师查看单个提交的 AI 初评草稿、指标分、置信度、核查发现和 LLM 调用留痕。
+- 学生只能读取本人 `published` 状态的评价反馈，不能读取未发布 AI 草稿或其他学生结果。
 
 ## 6. 迁移脚本
 

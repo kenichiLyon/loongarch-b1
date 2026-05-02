@@ -182,6 +182,9 @@ JOB_RUN_ONCE=true pnpm worker:evaluate
 - `GET /jobs`、`GET /jobs/:jobId`：管理员/教师查看解析、评价、报表异步任务状态
 - `GET /audit-logs`：管理员/教师按动作、实体、操作者筛选审计日志
 - `GET /evaluations/submissions/:submissionId`：管理员/教师查看 AI 初评草稿、指标分和核查发现
+- `PATCH /evaluations/submissions/:submissionId/review`：管理员/教师逐项填写教师分、评语并确认最终分
+- `POST /evaluations/submissions/:submissionId/publish`：管理员/教师发布已复核评价结果
+- `GET /evaluations/submissions/:submissionId/published`：学生查看自己已发布的反馈，管理员/教师也可查看
 
 除健康检查和登录/初始化接口外，基础管理接口均需要 Bearer Token；管理员可创建用户，管理员/教师可维护课程、班级、评价模板和实训任务。
 
@@ -226,7 +229,8 @@ curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
 6. 规则引擎检查提交完整性、步骤覆盖、格式规范和明显风险。
 7. LLM Gateway 使用脱敏摘要生成 JSON 初评建议、证据、扣分点和置信度。
 8. 教师逐项复核、改分、写评语并确认最终成绩。
-9. 系统生成学生报告和课程/班级统计报表，支持 Excel/PDF 导出。
+9. 教师发布评价结果后，学生只能查看自己的已发布反馈。
+10. 系统生成学生报告和课程/班级统计报表，支持 Excel/PDF 导出。
 
 ## 8. 大模型调用原则
 
@@ -307,9 +311,10 @@ pnpm risk:loongarch
 - CI 已纳入仓库脚本测试，保证 LoongArch 风险扫描逻辑随 PR 自动验证。
 - OpenAI-compatible LLM Gateway、脱敏证据摘要、JSON 初评校验、评价 worker 和 AI 草稿落库。
 - 确定性规则核查基础能力：需求覆盖、步骤完整性、文档证据质量、异常/Prompt Injection 风险识别和指标 `rule_score` 落库。
+- 教师复核 API：逐项教师分、总评语、最终分确认、发布和学生已发布反馈查看。
 
 下一步：
 
 1. 扩展 Word/PDF/OCR/代码包真实解析器与解析回归样例。
-2. 补齐教师复核改分、确认发布和学生反馈查看接口。
-3. 前端补齐登录、任务状态、审计日志和 AI 初评查看页面。
+2. 补齐前端登录、任务状态、教师复核、学生反馈和 AI/规则初评查看页面。
+3. 推进报表导出 API、统计查询和 Excel/PDF 异步生成。

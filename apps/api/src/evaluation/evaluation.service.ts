@@ -1,8 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { PoolClient, QueryResultRow } from 'pg';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import { AuditService } from '../audit/audit.service';
 import { DatabaseService } from '../database/database.service';
+import { UserRole } from '../domain/core';
 import { buildLlmInputHash, LlmGatewayService, type LlmJsonResponse } from '../llm/llm-gateway.service';
+import type { ReviewSubmissionDto } from './evaluation.dto';
 import { buildEvaluationPrompt } from './evaluation-prompt';
 import {
   buildSkippedEvaluationDraft,
@@ -59,6 +62,27 @@ interface MetricScoreRow extends QueryResultRow {
   teacherScore: string | null;
   finalScore: string | null;
   confidence: string | null;
+  comments: unknown;
+}
+
+interface EvaluationForMutationRow extends QueryResultRow {
+  id: string;
+  submissionId: string;
+  studentId: string;
+  status: string;
+  finalScore: string | null;
+}
+
+interface MetricScoreForReviewRow extends QueryResultRow {
+  id: string;
+  rubricMetricId: string;
+  metricName: string;
+  weight: string;
+  maxScore: string;
+  ruleScore: string | null;
+  aiScore: string | null;
+  teacherScore: string | null;
+  finalScore: string | null;
   comments: unknown;
 }
 
@@ -201,6 +225,139 @@ export class EvaluationService {
       metricScores: metricScores.rows,
       findings: findings.rows,
     };
+  }
+
+  async getPublishedEvaluation(submissionId: string, user: AuthenticatedUser): Promise<unknown> {
+    const submission = await this.ensureSubmissionExists(submissionId);
+    if (user.role === UserRole.Student && submission.studentId !== user.id) {
+      throw new ForbiddenException('Students can only view their own published feedback');
+    }
+
+    const published = await this.database.query<{ id: string }>(
+      `SELECT id
+         FROM evaluation_results
+        WHERE submission_id = $1
+          AND status = 'published'`,
+      [submissionId],
+    );
+    if (!published.rows[0]) {
+      throw new NotFoundException('Published evaluation not found');
+    }
+
+    return this.getEvaluation(submissionId);
+  }
+
+  async reviewSubmission(submissionId: string, dto: ReviewSubmissionDto, reviewer: AuthenticatedUser): Promise<unknown> {
+    await this.database.withTransaction(async (client) => {
+      const evaluation = await loadEvaluationForMutation(client, submissionId);
+      if (evaluation.status === 'published') {
+        throw new BadRequestException('Published evaluations cannot be edited');
+      }
+
+      const metrics = await loadMetricScoresForReview(client, evaluation.id);
+      if (metrics.length === 0) {
+        throw new BadRequestException('Evaluation has no metric scores to review');
+      }
+
+      validateTeacherMetricScores(dto.metricScores ?? [], metrics);
+      for (const metricScore of dto.metricScores ?? []) {
+        const existing = findMetricScore(metrics, metricScore.rubricMetricId);
+        await client.query(
+          `UPDATE metric_scores
+              SET teacher_score = $3,
+                  final_score = $3,
+                  comments = $4::jsonb
+            WHERE evaluation_result_id = $1
+              AND rubric_metric_id = $2`,
+          [
+            evaluation.id,
+            metricScore.rubricMetricId,
+            metricScore.teacherScore,
+            serializeMetricComments(parseStringArray(existing.comments), metricScore.comment ? [`教师复核：${metricScore.comment}`] : []),
+          ],
+        );
+      }
+
+      await client.query(
+        `UPDATE metric_scores
+            SET final_score = COALESCE(teacher_score, ai_score, rule_score)
+          WHERE evaluation_result_id = $1
+            AND final_score IS NULL`,
+        [evaluation.id],
+      );
+
+      const reviewedMetrics = await loadMetricScoresForReview(client, evaluation.id);
+      const finalScore = calculateWeightedFinalScore(reviewedMetrics);
+      await client.query(
+        `UPDATE evaluation_results
+            SET status = 'teacher_reviewed',
+                total_teacher_score = $2,
+                final_score = $2,
+                teacher_comment = COALESCE($3, teacher_comment),
+                confirmed_by = $4,
+                confirmed_at = now(),
+                updated_at = now()
+          WHERE id = $1`,
+        [evaluation.id, finalScore, dto.teacherComment ?? null, reviewer.id],
+      );
+
+      await this.auditService.record({
+        actorId: reviewer.id,
+        action: 'submission.teacher_reviewed',
+        entityType: 'submission',
+        entityId: submissionId,
+        detail: {
+          evaluationResultId: evaluation.id,
+          metricOverrideCount: dto.metricScores?.length ?? 0,
+          finalScore,
+        },
+        client,
+      });
+    });
+
+    return this.getEvaluation(submissionId);
+  }
+
+  async publishEvaluation(submissionId: string, publisher: AuthenticatedUser): Promise<unknown> {
+    await this.database.withTransaction(async (client) => {
+      const evaluation = await loadEvaluationForMutation(client, submissionId);
+      if (evaluation.status !== 'teacher_reviewed') {
+        throw new BadRequestException('Evaluation must be teacher reviewed before publishing');
+      }
+      if (evaluation.finalScore === null) {
+        throw new BadRequestException('Evaluation has no final score to publish');
+      }
+
+      await client.query(
+        `UPDATE evaluation_results
+            SET status = 'published',
+                published_at = now(),
+                updated_at = now()
+          WHERE id = $1`,
+        [evaluation.id],
+      );
+      await client.query(
+        `UPDATE submissions
+            SET status = 'published',
+                updated_at = now()
+          WHERE id = $1`,
+        [submissionId],
+      );
+
+      await this.auditService.record({
+        actorId: publisher.id,
+        action: 'submission.evaluation_published',
+        entityType: 'submission',
+        entityId: submissionId,
+        detail: {
+          evaluationResultId: evaluation.id,
+          finalScore: Number(evaluation.finalScore),
+        },
+        client,
+      });
+    });
+
+    return this.getEvaluation(submissionId);
   }
 
   private async loadEvaluationContext(submissionId: string): Promise<SubmissionEvaluationContext> {
@@ -422,6 +579,84 @@ async function insertLlmCallLog(
   );
 }
 
+async function loadEvaluationForMutation(client: PoolClient, submissionId: string) {
+  const result = await client.query<EvaluationForMutationRow>(
+    `SELECT er.id, er.submission_id AS "submissionId", s.student_id AS "studentId",
+            er.status, er.final_score AS "finalScore"
+       FROM evaluation_results er
+       JOIN submissions s ON s.id = er.submission_id
+      WHERE er.submission_id = $1
+      FOR UPDATE OF er, s`,
+    [submissionId],
+  );
+  const evaluation = result.rows[0];
+  if (!evaluation) {
+    throw new NotFoundException('Evaluation result not found');
+  }
+  return evaluation;
+}
+
+async function loadMetricScoresForReview(client: PoolClient, evaluationResultId: string) {
+  const result = await client.query<MetricScoreForReviewRow>(
+    `SELECT ms.id, ms.rubric_metric_id AS "rubricMetricId", rm.name AS "metricName",
+            rm.weight, rm.max_score AS "maxScore", ms.rule_score AS "ruleScore",
+            ms.ai_score AS "aiScore", ms.teacher_score AS "teacherScore",
+            ms.final_score AS "finalScore", ms.comments
+       FROM metric_scores ms
+       JOIN rubric_metrics rm ON rm.id = ms.rubric_metric_id
+      WHERE ms.evaluation_result_id = $1
+      ORDER BY rm.sort_order ASC, rm.created_at ASC
+      FOR UPDATE OF ms`,
+    [evaluationResultId],
+  );
+  return result.rows;
+}
+
+function validateTeacherMetricScores(input: ReviewSubmissionDto['metricScores'], metrics: MetricScoreForReviewRow[]) {
+  const metricMap = new Map(metrics.map((metric) => [metric.rubricMetricId, metric]));
+  const seen = new Set<string>();
+  for (const metricScore of input ?? []) {
+    if (seen.has(metricScore.rubricMetricId)) {
+      throw new BadRequestException(`Duplicate metric score override: ${metricScore.rubricMetricId}`);
+    }
+    seen.add(metricScore.rubricMetricId);
+
+    const metric = metricMap.get(metricScore.rubricMetricId);
+    if (!metric) {
+      throw new BadRequestException(`Unknown rubric metric: ${metricScore.rubricMetricId}`);
+    }
+    const maxScore = Number(metric.maxScore);
+    if (!Number.isFinite(metricScore.teacherScore) || metricScore.teacherScore < 0 || metricScore.teacherScore > maxScore) {
+      throw new BadRequestException(`Teacher score for ${metric.metricName} must be between 0 and ${maxScore}`);
+    }
+  }
+}
+
+function findMetricScore(metrics: MetricScoreForReviewRow[], rubricMetricId: string) {
+  const metric = metrics.find((item) => item.rubricMetricId === rubricMetricId);
+  if (!metric) {
+    throw new BadRequestException(`Unknown rubric metric: ${rubricMetricId}`);
+  }
+  return metric;
+}
+
+function calculateWeightedFinalScore(metrics: MetricScoreForReviewRow[]) {
+  let total = 0;
+  for (const metric of metrics) {
+    const finalScore = metric.finalScore === null ? null : Number(metric.finalScore);
+    const maxScore = Number(metric.maxScore);
+    const weight = Number(metric.weight);
+    if (finalScore === null || !Number.isFinite(finalScore)) {
+      throw new BadRequestException(`Metric ${metric.metricName} is missing a final score`);
+    }
+    if (!Number.isFinite(maxScore) || maxScore <= 0 || !Number.isFinite(weight) || weight <= 0) {
+      throw new BadRequestException(`Metric ${metric.metricName} has invalid scoring metadata`);
+    }
+    total += (finalScore / maxScore) * weight;
+  }
+  return Number(total.toFixed(2));
+}
+
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message.slice(0, 2000);
@@ -432,4 +667,11 @@ function getErrorMessage(error: unknown) {
 function serializeMetricComments(ruleComments: string[] | undefined, aiComments: string[] | undefined) {
   // metric_scores.comments is a NOT NULL JSONB array; persist [] instead of null for a stable API shape.
   return JSON.stringify([...(ruleComments ?? []), ...(aiComments ?? [])]);
+}
+
+function parseStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === 'string');
 }
