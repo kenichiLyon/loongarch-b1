@@ -54,6 +54,7 @@ docs/
   DATABASE_MIGRATIONS.md       数据库迁移说明
   DEPENDENCY_POLICY.md         依赖锁定策略
   LOONGARCH_COMPATIBILITY.md   LoongArch/银河麒麟兼容性清单
+  RELEASE.md                   CD 自动构建产物发布说明
   ROADMAP.md                   12 周交付路线图
   SECURITY.md                  安全与合规基线
 fixtures/                      非敏感测试样例说明
@@ -153,7 +154,15 @@ pnpm build
 
 详见 `docs/LOONGARCH_COMPATIBILITY.md`。
 
-## 9. 版本控制纪律
+## 9. 自动构建与发布
+
+本项目已配置 CD 工作流：
+
+- 推送 `main` 或手动触发时，GitHub Actions 会运行测试、构建前后端，并上传 auto build artifact。
+- 推送 `v*` tag 时，会额外创建 GitHub Release 并附带 Web/API/Docs 压缩包和 `BUILD_MANIFEST.json`。
+- 发布细节见 `docs/RELEASE.md`。
+
+## 10. 版本控制纪律
 
 本项目遵循 `AGENT.md`：
 
@@ -163,7 +172,7 @@ pnpm build
 - Commit message 使用 Conventional Commits。
 - 每次提交前至少运行与变更范围相关的最小检查。
 
-## 10. 当前状态
+## 11. 当前状态
 
 当前已完成：
 
@@ -175,6 +184,7 @@ pnpm build
 - 依赖精确版本、pnpm lockfile 和 CI 冻结安装。
 - 核心 PostgreSQL 数据模型和初始迁移脚本。
 - 数据库迁移执行命令与迁移校验测试。
+- GitHub Actions CD 自动构建并上传发布产物。
 
 下一步：
 
