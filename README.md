@@ -93,13 +93,16 @@ DATABASE_HEALTH_TIMEOUT_MS=3000
 DATABASE_POOL_MAX=10
 DATABASE_IDLE_TIMEOUT_MS=30000
 DATABASE_CONNECTION_TIMEOUT_MS=5000
+AUTH_TOKEN_SECRET=dev-only-change-me-please
+AUTH_TOKEN_TTL_SECONDS=28800
+AUTH_BOOTSTRAP_TOKEN=dev-bootstrap-token
 STORAGE_ROOT=./storage
 LLM_BASE_URL=https://example.invalid/v1
 LLM_API_KEY=
 LLM_MODEL=
 ```
 
-`LLM_API_KEY` 不得提交仓库；云端调用前必须执行脱敏摘要策略。
+`AUTH_TOKEN_SECRET`、`AUTH_BOOTSTRAP_TOKEN`、`LLM_API_KEY` 不得提交生产真实值；云端调用前必须执行脱敏摘要策略。
 
 ### 本地开发
 
@@ -130,6 +133,9 @@ pnpm build
 
 当前已提供第一批管理端基础接口：
 
+- `POST /auth/bootstrap-admin`：仅首个管理员初始化使用，需要 `AUTH_BOOTSTRAP_TOKEN`
+- `POST /auth/login`：用户名密码登录，返回 Bearer Token
+- `GET /auth/me`：读取当前登录用户
 - `GET /users`、`POST /users`
 - `GET /classes`、`POST /classes`
 - `GET /courses`、`POST /courses`
@@ -137,7 +143,23 @@ pnpm build
 - `GET /rubrics`、`POST /rubrics`
 - `GET /experiments`、`POST /experiments`
 
-这些接口使用 PostgreSQL 查询层，面向第 1-2 周的用户、课程、班级、评价模板和实训任务管理闭环。
+除健康检查和登录/初始化接口外，基础管理接口均需要 Bearer Token；管理员可创建用户，管理员/教师可维护课程、班级、评价模板和实训任务。
+
+### 初始化管理员
+
+空库首次启动后可用以下请求创建第一个管理员：
+
+```bash
+curl -X POST http://localhost:3000/auth/bootstrap-admin \
+  -H "Content-Type: application/json" \
+  -d '{"bootstrapToken":"dev-bootstrap-token","username":"admin","displayName":"管理员","initialPassword":"password-123"}'
+```
+
+随后使用 `POST /auth/login` 获取 `accessToken`，调用管理接口时添加：
+
+```bash
+Authorization: Bearer <accessToken>
+```
 
 ## 7. 核心业务流程
 
@@ -205,9 +227,10 @@ pnpm build
 - GitHub Actions CD 自动构建并上传发布产物。
 - 数据库连接健康检查接口。
 - 用户、班级、课程、评价模板和实训任务基础 API。
+- 基于 scrypt 密码哈希与 HMAC Bearer Token 的登录、首个管理员初始化和 RBAC 守卫。
 
 下一步：
 
-1. 增加 RBAC 鉴权守卫与登录流程。
-2. 增加提交物上传与本地对象存储接口。
-3. 前置验证 LoongArch 关键依赖风险。
+1. 增加提交物上传与本地对象存储接口。
+2. 前置验证 LoongArch 关键依赖风险。
+3. 接入解析任务状态流与审计日志。
