@@ -281,7 +281,8 @@ export class EvaluationService {
       await client.query(
         `UPDATE metric_scores
             SET final_score = COALESCE(teacher_score, ai_score, rule_score)
-          WHERE evaluation_result_id = $1`,
+          WHERE evaluation_result_id = $1
+            AND final_score IS NULL`,
         [evaluation.id],
       );
 
