@@ -198,8 +198,12 @@ async function insertExtractedContents(client: PoolClient, artifactId: string, d
 }
 
 async function enqueueEvaluationJobIfReady(client: PoolClient, submissionId: string) {
-  const result = await client.query<{ id: string }>(
-    `INSERT INTO jobs (job_type, payload)
+  const result = await client.query<{ id: string }>(buildEnqueueEvaluationJobSql(), [submissionId]);
+  return result.rows[0]?.id ?? null;
+}
+
+export function buildEnqueueEvaluationJobSql() {
+  return `INSERT INTO jobs (job_type, payload)
      SELECT 'evaluate_submission', jsonb_build_object('submissionId', $1::text)
       WHERE EXISTS (
               SELECT 1 FROM artifacts
@@ -216,10 +220,10 @@ async function enqueueEvaluationJobIfReady(client: PoolClient, submissionId: str
                  AND payload->>'submissionId' = $1::text
                  AND status IN ('queued', 'running')
             )
-     RETURNING id`,
-    [submissionId],
-  );
-  return result.rows[0]?.id ?? null;
+     ON CONFLICT (job_type, ((payload->>'submissionId')))
+       WHERE job_type = 'evaluate_submission' AND payload ? 'submissionId'
+     DO NOTHING
+     RETURNING id`;
 }
 
 async function updateSubmissionAfterParse(client: PoolClient, submissionId: string, evaluationQueued: boolean) {

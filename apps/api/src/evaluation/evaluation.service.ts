@@ -1,9 +1,7 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type { PoolClient, QueryResultRow } from 'pg';
 import { AuditService } from '../audit/audit.service';
-import type { AuthenticatedUser } from '../auth/auth.types';
 import { DatabaseService } from '../database/database.service';
-import { UserRole } from '../domain/core';
 import { buildLlmInputHash, LlmGatewayService, type LlmJsonResponse } from '../llm/llm-gateway.service';
 import { buildEvaluationPrompt } from './evaluation-prompt';
 import {
@@ -143,11 +141,8 @@ export class EvaluationService {
     return { submissionId, status: 'ai_draft', metricScoreCount: draft.metricScores.length, findingCount: draft.findings.length };
   }
 
-  async getEvaluationForUser(submissionId: string, user: AuthenticatedUser): Promise<unknown> {
-    const submission = await this.loadSubmissionForAccess(submissionId);
-    if (user.role === UserRole.Student && submission.studentId !== user.id) {
-      throw new ForbiddenException('Students can only access their own evaluation');
-    }
+  async getEvaluation(submissionId: string): Promise<unknown> {
+    await this.ensureSubmissionExists(submissionId);
 
     const evaluation = await this.database.query<EvaluationResultRow>(
       `SELECT id, submission_id AS "submissionId", status, total_ai_score AS "totalAiScore",
@@ -253,7 +248,7 @@ export class EvaluationService {
     };
   }
 
-  private async loadSubmissionForAccess(submissionId: string) {
+  private async ensureSubmissionExists(submissionId: string) {
     const result = await this.database.query<SubmissionAccessRow>(
       `SELECT id AS "submissionId", student_id AS "studentId", status,
               created_at AS "createdAt"
