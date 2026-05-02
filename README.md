@@ -126,7 +126,20 @@ pnpm build
 - Vue 3 前端 TypeScript 检查和 Vite 构建通过。
 - 核心评价指标权重校验测试通过。
 
-## 6. 核心业务流程
+## 6. 基础 API
+
+当前已提供第一批管理端基础接口：
+
+- `GET /users`、`POST /users`
+- `GET /classes`、`POST /classes`
+- `GET /courses`、`POST /courses`
+- `POST /courses/:courseId/classes`
+- `GET /rubrics`、`POST /rubrics`
+- `GET /experiments`、`POST /experiments`
+
+这些接口使用 PostgreSQL 查询层，面向第 1-2 周的用户、课程、班级、评价模板和实训任务管理闭环。
+
+## 7. 核心业务流程
 
 1. 管理员创建用户、班级、课程。
 2. 教师创建实训任务并配置评价模板。
@@ -138,7 +151,7 @@ pnpm build
 8. 教师逐项复核、改分、写评语并确认最终成绩。
 9. 系统生成学生报告和课程/班级统计报表，支持 Excel/PDF 导出。
 
-## 7. 大模型调用原则
+## 8. 大模型调用原则
 
 - 所有 LLM 调用必须通过统一 `LLM Gateway`。
 - 支持云端 OpenAI-compatible API，也支持本地或局域网模型服务。
@@ -146,7 +159,7 @@ pnpm build
 - LLM 输出必须符合后端 JSON Schema，失败时重试或进入教师待复核。
 - Prompt 中系统评分规则优先，上传内容不得覆盖系统规则。
 
-## 8. LoongArch 与银河麒麟适配
+## 9. LoongArch 与银河麒麟适配
 
 目标部署环境固定为 LoongArch 架构 + 银河麒麟高级服务器版。开发中必须持续记录：
 
@@ -159,7 +172,7 @@ pnpm build
 
 详见 `docs/LOONGARCH_COMPATIBILITY.md`。
 
-## 9. 自动构建与发布
+## 10. 自动构建与发布
 
 本项目已配置 CD 工作流：
 
@@ -167,7 +180,7 @@ pnpm build
 - 推送 `v*` tag 时，会额外创建 GitHub Release 并附带 Web/API/Docs 压缩包和 `BUILD_MANIFEST.json`。
 - 发布细节见 `docs/RELEASE.md`。
 
-## 10. 版本控制纪律
+## 11. 版本控制纪律
 
 本项目遵循 `AGENT.md`：
 
@@ -177,7 +190,7 @@ pnpm build
 - Commit message 使用 Conventional Commits。
 - 每次提交前至少运行与变更范围相关的最小检查。
 
-## 11. 当前状态
+## 12. 当前状态
 
 当前已完成：
 
@@ -191,9 +204,10 @@ pnpm build
 - 数据库迁移执行命令与迁移校验测试。
 - GitHub Actions CD 自动构建并上传发布产物。
 - 数据库连接健康检查接口。
+- 用户、班级、课程、评价模板和实训任务基础 API。
 
 下一步：
 
-1. 实现用户/角色/课程/班级/实训任务基础 API。
-2. 接入 PostgreSQL 查询层和配置校验。
+1. 增加 RBAC 鉴权守卫与登录流程。
+2. 增加提交物上传与本地对象存储接口。
 3. 前置验证 LoongArch 关键依赖风险。
