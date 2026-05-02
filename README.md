@@ -51,6 +51,7 @@ apps/
 docs/
   ARCHITECTURE.md              架构概要
   DATA_MODEL.md                核心数据模型
+  DEPENDENCY_POLICY.md         依赖锁定策略
   LOONGARCH_COMPATIBILITY.md   LoongArch/银河麒麟兼容性清单
   ROADMAP.md                   12 周交付路线图
   SECURITY.md                  安全与合规基线
@@ -170,10 +171,11 @@ pnpm build
 - NestJS 后端健康检查接口。
 - Vue 3 首屏工作台。
 - 核心评价领域契约和权重校验测试。
+- 依赖精确版本、pnpm lockfile 和 CI 冻结安装。
+- 核心 PostgreSQL 数据模型和初始迁移脚本。
 
 下一步：
 
-1. 固定依赖锁文件与 CI 校验。
-2. 完成核心 PostgreSQL 数据模型和迁移脚本。
-3. 实现用户/角色/课程/班级/实训任务/评价模板基础 API。
-4. 前置验证 LoongArch 关键依赖风险。
+1. 实现数据库连接与迁移执行命令。
+2. 实现用户/角色/课程/班级/实训任务基础 API。
+3. 前置验证 LoongArch 关键依赖风险。

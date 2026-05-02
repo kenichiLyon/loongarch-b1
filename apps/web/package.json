@@ -12,13 +12,13 @@
     "test": "node --test --test-reporter=spec"
   },
   "dependencies": {
-    "@vitejs/plugin-vue": "^5.2.3",
-    "echarts": "^5.6.0",
-    "element-plus": "^2.9.8",
-    "vite": "^6.3.4",
-    "vue": "^3.5.13"
+    "@vitejs/plugin-vue": "5.2.4",
+    "echarts": "5.6.0",
+    "element-plus": "2.13.7",
+    "vite": "6.4.2",
+    "vue": "3.5.33"
   },
   "devDependencies": {
-    "vue-tsc": "^2.2.10"
+    "vue-tsc": "2.2.12"
   }
 }
