@@ -14,6 +14,7 @@
 - 文本解析通过 `PARSER_MAX_TEXT_CHARS` 截断，避免超大文本拖垮单个 worker。
 - 上传和解析结果写入审计日志；写入发生在同一数据库事务内，保证排障时可以关联业务状态和操作记录。
 - 管理员/教师可通过 `GET /jobs` 查询异步任务，通过 `GET /audit-logs` 查询处理留痕；接口单次最多返回 200 条，避免状态页拖垮数据库。
+- 教师复核和发布在事务内锁定 `evaluation_results` 与对应 `metric_scores` 行，避免多个教师同时改分时出现覆盖或总分不一致。
 
 ## 数据库并发要点
 
@@ -27,6 +28,7 @@
 - `idx_evaluation_results_status_updated`：优化教师端待复核列表。
 - `idx_verification_findings_type_severity`：优化常见问题统计。
 - API 连接池由 `DATABASE_POOL_MAX` 控制；部署时应按 CPU、PostgreSQL max_connections 和 worker 数量共同设置。
+- 教师复核属于低频写操作，但仍通过行级锁保证同一提交的改分和发布串行化；不同提交可并行复核。
 
 ## 推荐部署方式
 
