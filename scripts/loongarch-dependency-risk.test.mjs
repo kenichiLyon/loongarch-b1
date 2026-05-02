@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { analyzeLockfile, parsePackageBlocks, renderMarkdownReport } from './loongarch-dependency-risk.mjs';
+import { analyzeLockfile, parsePackageBlocks, readCliOptions, renderMarkdownReport } from './loongarch-dependency-risk.mjs';
 
 const lockfile = `lockfileVersion: '9.0'
 
@@ -44,4 +44,13 @@ test('renders markdown report with risk table', () => {
 
   assert.match(report, /LoongArch 依赖风险扫描报告/);
   assert.match(report, /@esbuild\/linux-loong64@0.27.7/);
+});
+
+test('validates write option path before scanning', () => {
+  assert.deepEqual(readCliOptions(['node', 'scanner.mjs']), {});
+  assert.deepEqual(readCliOptions(['node', 'scanner.mjs', '--write', 'docs/report.md']), {
+    outputPath: 'docs/report.md',
+  });
+  assert.throws(() => readCliOptions(['node', 'scanner.mjs', '--write']), /--write requires an output path/);
+  assert.throws(() => readCliOptions(['node', 'scanner.mjs', '--write', '--flag']), /--write requires an output path/);
 });

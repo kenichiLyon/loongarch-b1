@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { PoolClient, QueryResultRow } from 'pg';
 import { DatabaseService } from '../database/database.service';
+import { addEqualityFilter, clampQueryLimit } from '../database/sql-query.helpers';
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 export type JobType = 'parse_artifact' | 'evaluate_submission' | 'export_report';
@@ -128,8 +129,8 @@ export function buildListJobsSql(filters: ListJobsFilters) {
   const params: unknown[] = [];
   const where: string[] = [];
 
-  addFilter(where, params, 'job_type', filters.jobType);
-  addFilter(where, params, 'status', filters.status);
+  addEqualityFilter(where, params, 'job_type', filters.jobType);
+  addEqualityFilter(where, params, 'status', filters.status);
 
   if (filters.submissionId) {
     params.push(filters.submissionId);
@@ -141,7 +142,7 @@ export function buildListJobsSql(filters: ListJobsFilters) {
     where.push(`payload->>'artifactId' = $${params.length}`);
   }
 
-  params.push(clampLimit(filters.limit));
+  params.push(clampQueryLimit(filters.limit));
 
   return {
     sql: `${selectJobColumnsSql()}
@@ -157,19 +158,4 @@ function selectJobColumnsSql() {
                  run_after AS "runAfter", locked_at AS "lockedAt", locked_by AS "lockedBy",
                  error_message AS "errorMessage", created_at AS "createdAt", updated_at AS "updatedAt"
             FROM jobs`;
-}
-
-function addFilter(where: string[], params: unknown[], column: string, value: string | undefined) {
-  if (!value) {
-    return;
-  }
-  params.push(value);
-  where.push(`${column} = $${params.length}`);
-}
-
-function clampLimit(limit: number | undefined) {
-  if (!limit || !Number.isFinite(limit)) {
-    return 50;
-  }
-  return Math.min(Math.max(Math.floor(limit), 1), 200);
 }

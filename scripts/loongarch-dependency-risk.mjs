@@ -167,6 +167,20 @@ export function renderMarkdownReport(scan) {
   return `${lines.join('\n')}\n`;
 }
 
+export function readCliOptions(argv) {
+  const writeIndex = argv.indexOf('--write');
+  if (writeIndex < 0) {
+    return {};
+  }
+
+  const outputPath = argv[writeIndex + 1];
+  if (!outputPath || outputPath.startsWith('--')) {
+    throw new Error('--write requires an output path');
+  }
+
+  return { outputPath };
+}
+
 function summarizeRisks(risks) {
   return {
     high: risks.filter((risk) => risk.severity === 'high').length,
@@ -247,8 +261,7 @@ function escapePipe(value) {
 }
 
 async function main() {
-  const writeIndex = process.argv.indexOf('--write');
-  const outputPath = writeIndex >= 0 ? process.argv[writeIndex + 1] : undefined;
+  const { outputPath } = readCliOptions(process.argv);
   const scan = await scanLockfile(defaultLockfile);
   const report = renderMarkdownReport(scan);
 
@@ -260,5 +273,8 @@ async function main() {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await main();
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
 }

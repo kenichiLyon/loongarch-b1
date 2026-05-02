@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient, QueryResultRow } from 'pg';
 import { DatabaseService } from '../database/database.service';
+import { addEqualityFilter, clampQueryLimit } from '../database/sql-query.helpers';
 
 export interface AuditLogRow extends QueryResultRow {
   id: string;
@@ -57,12 +58,12 @@ export class AuditService {
     const params: unknown[] = [];
     const where: string[] = [];
 
-    addTextFilter(where, params, 'al.action', filters.action);
-    addTextFilter(where, params, 'al.entity_type', filters.entityType);
-    addTextFilter(where, params, 'al.entity_id', filters.entityId);
-    addTextFilter(where, params, 'al.actor_id', filters.actorId);
+    addEqualityFilter(where, params, 'al.action', filters.action);
+    addEqualityFilter(where, params, 'al.entity_type', filters.entityType);
+    addEqualityFilter(where, params, 'al.entity_id', filters.entityId);
+    addEqualityFilter(where, params, 'al.actor_id', filters.actorId);
 
-    const limit = clampLimit(filters.limit);
+    const limit = clampQueryLimit(filters.limit);
     params.push(limit);
 
     const result = await this.database.query<AuditLogRow>(
@@ -80,19 +81,4 @@ export class AuditService {
 
     return result.rows;
   }
-}
-
-function addTextFilter(where: string[], params: unknown[], column: string, value: string | undefined) {
-  if (!value) {
-    return;
-  }
-  params.push(value);
-  where.push(`${column} = $${params.length}`);
-}
-
-function clampLimit(limit: number | undefined) {
-  if (!limit || !Number.isFinite(limit)) {
-    return 50;
-  }
-  return Math.min(Math.max(Math.floor(limit), 1), 200);
 }
