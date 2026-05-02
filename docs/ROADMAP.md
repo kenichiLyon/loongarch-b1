@@ -23,8 +23,8 @@
 ## 第 5-6 周：规则核查与 LLM 初评
 
 - 实现确定性规则核查。
-- 接入统一 LLM Gateway。
-- 实现脱敏摘要、JSON Schema 校验、失败重试和待人工复核状态。
+- 接入统一 LLM Gateway。（已完成基础 OpenAI-compatible HTTP 网关）
+- 实现脱敏摘要、JSON Schema 校验、失败重试和待人工复核状态。（已完成脱敏摘要、JSON 结构校验、评价 worker 和未配置 LLM 降级草稿）
 
 ## 第 7-8 周：教师复核与评价管理
 

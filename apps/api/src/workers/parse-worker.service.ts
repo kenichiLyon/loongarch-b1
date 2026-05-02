@@ -84,20 +84,8 @@ export class ParseWorkerService {
         [artifact.id],
       );
 
-      await client.query(
-        `UPDATE submissions s
-            SET status = CASE
-                  WHEN NOT EXISTS (
-                    SELECT 1 FROM artifacts a
-                     WHERE a.submission_id = s.id
-                       AND a.status IN ('uploaded', 'parsing')
-                  ) THEN 'submitted'
-                  ELSE s.status
-                END,
-                updated_at = now()
-          WHERE s.id = $1`,
-        [artifact.submissionId],
-      );
+      const evaluationJobId = await enqueueEvaluationJobIfReady(client, artifact.submissionId);
+      await updateSubmissionAfterParse(client, artifact.submissionId, Boolean(evaluationJobId));
 
       await this.jobQueue.markSucceeded(client, job.id);
 
@@ -110,6 +98,7 @@ export class ParseWorkerService {
           jobId: job.id,
           workerId: job.lockedBy,
           contentCount: drafts.length,
+          queuedEvaluationJobId: evaluationJobId,
         },
         client,
       });
@@ -206,6 +195,60 @@ async function insertExtractedContents(client: PoolClient, artifactId: string, d
       [artifactId, draft.sourceRef, draft.contentKind, draft.contentText, JSON.stringify(draft.metadata)],
     );
   }
+}
+
+async function enqueueEvaluationJobIfReady(client: PoolClient, submissionId: string) {
+  const result = await client.query<{ id: string }>(
+    `INSERT INTO jobs (job_type, payload)
+     SELECT 'evaluate_submission', jsonb_build_object('submissionId', $1::text)
+      WHERE EXISTS (
+              SELECT 1 FROM artifacts
+               WHERE submission_id = $1
+            )
+        AND NOT EXISTS (
+              SELECT 1 FROM artifacts
+               WHERE submission_id = $1
+                 AND status <> 'parsed'
+            )
+        AND NOT EXISTS (
+              SELECT 1 FROM jobs
+               WHERE job_type = 'evaluate_submission'
+                 AND payload->>'submissionId' = $1::text
+                 AND status IN ('queued', 'running')
+            )
+     RETURNING id`,
+    [submissionId],
+  );
+  return result.rows[0]?.id ?? null;
+}
+
+async function updateSubmissionAfterParse(client: PoolClient, submissionId: string, evaluationQueued: boolean) {
+  await client.query(
+    `UPDATE submissions s
+        SET status = CASE
+              WHEN $2::boolean THEN 'evaluating'
+              WHEN EXISTS (
+                SELECT 1 FROM jobs j
+                 WHERE j.job_type = 'evaluate_submission'
+                   AND j.payload->>'submissionId' = $1::text
+                   AND j.status IN ('queued', 'running')
+              ) THEN 'evaluating'
+              WHEN EXISTS (
+                SELECT 1 FROM artifacts a
+                 WHERE a.submission_id = s.id
+                   AND a.status = 'failed'
+              ) THEN 'failed'
+              WHEN NOT EXISTS (
+                SELECT 1 FROM artifacts a
+                 WHERE a.submission_id = s.id
+                   AND a.status IN ('uploaded', 'parsing')
+              ) THEN 'submitted'
+              ELSE s.status
+            END,
+            updated_at = now()
+      WHERE s.id = $1`,
+    [submissionId, evaluationQueued],
+  );
 }
 
 function getErrorMessage(error: unknown) {

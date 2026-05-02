@@ -56,4 +56,10 @@
 - 依赖：仅复用 PostgreSQL 表、JSONB 字段和 B-tree/表达式索引，未新增第三方依赖。
 - 影响：高并发上传时审计写入与业务事务一致；目标环境需观察 `audit_logs` 增长量并按课程周期制定归档策略。
 
+### 2026-05-02：LLM Gateway 与评价 worker
+
+- 变更：新增 OpenAI-compatible LLM Gateway、脱敏证据摘要、JSON 初评校验、`evaluate_submission` worker、AI 草稿落库和评价查询接口。
+- 依赖：仅使用 Node.js 22 内置 `fetch`、`AbortController`、`crypto` 与 PostgreSQL JSONB，未新增第三方运行时依赖。
+- 影响：目标环境需验证 Node.js 22 内置 fetch 可用；本地/局域网模型服务需提供 `/chat/completions` 兼容接口。若未配置 `LLM_BASE_URL`/`LLM_MODEL`，系统会降级生成教师复核草稿，不阻塞上传和解析主流程。
+
 后续每次发现平台差异时，在本文件追加：验证日期、目标环境版本、依赖版本、测试命令、结果和替代方案。

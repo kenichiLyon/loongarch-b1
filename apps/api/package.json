@@ -11,7 +11,8 @@
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/**/*.test.ts",
     "db:migrate": "tsx src/database/migrate.ts",
-    "worker:parse": "tsx src/workers/parse-artifacts.ts"
+    "worker:parse": "tsx src/workers/parse-artifacts.ts",
+    "worker:evaluate": "tsx src/workers/evaluate-submissions.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.1.19",
