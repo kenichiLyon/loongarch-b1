@@ -8,9 +8,9 @@
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint",
+    "lint": "eslint . --max-warnings=0",
     "test": "pnpm -r test",
-    "check": "pnpm typecheck && pnpm build",
+    "check": "pnpm lint && pnpm typecheck && pnpm build",
     "db:migrate": "pnpm --filter @loongarch-b1/api db:migrate"
   },
   "engines": {
@@ -18,7 +18,13 @@
     "pnpm": ">=10"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@types/node": "22.19.17",
-    "typescript": "5.9.3"
+    "eslint": "10.3.0",
+    "eslint-plugin-vue": "10.9.0",
+    "globals": "17.6.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.59.1",
+    "vue-eslint-parser": "10.4.0"
   }
 }

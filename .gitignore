@@ -10,6 +10,6 @@ coverage/
 *.log
 .DS_Store
 Thumbs.db
-storage/
-uploads/
-exports/
+/storage/
+/uploads/
+/exports/

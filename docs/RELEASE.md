@@ -20,6 +20,12 @@ CD 工作流会生成 `release/` 目录并上传为 artifact：
 - `bundles/loongarch-b1-docs-<sha>.tar.gz`：文档与清单压缩包。
 - `BUILD_MANIFEST.json`：构建时间、commit、ref、Node/pnpm 版本、目标平台和产物列表。
 
+## 自动检查
+
+- CI 和 CD 在测试、构建前均执行 `pnpm lint`，当前使用 ESLint flat config 覆盖 TypeScript 与 Vue 文件。
+- CI/CD 包含 Sourcery AI code review/release review job；在 GitHub 仓库 Secrets 中配置 `SOURCERY_TOKEN` 后，PR、分支推送和发布打包会自动触发 Sourcery 审核。
+- 未配置 `SOURCERY_TOKEN` 时，Sourcery job 会显式跳过，不阻塞普通构建。
+
 ## 发布版本
 
 创建版本 tag 后会自动发布 GitHub Release：

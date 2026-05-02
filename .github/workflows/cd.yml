@@ -17,9 +17,30 @@ jobs:
   package:
     name: Build and publish artifacts
     runs-on: ubuntu-latest
+    env:
+      SOURCERY_TOKEN: ${{ secrets.SOURCERY_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python for Sourcery
+        if: env.SOURCERY_TOKEN != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Run Sourcery release review
+        if: env.SOURCERY_TOKEN != ''
+        uses: sourcery-ai/action@v1
+        with:
+          token: ${{ env.SOURCERY_TOKEN }}
+          target: apps docs scripts
+
+      - name: Skip Sourcery without token
+        if: env.SOURCERY_TOKEN == ''
+        run: echo "SOURCERY_TOKEN is not configured; skipping Sourcery AI release review."
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -34,6 +55,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Run linter
+        run: pnpm lint
 
       - name: Run API tests
         run: pnpm --filter @loongarch-b1/api test

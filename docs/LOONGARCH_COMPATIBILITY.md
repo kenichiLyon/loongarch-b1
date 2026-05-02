@@ -30,4 +30,10 @@
 - 依赖：仅使用 Node.js 内置 `crypto` 的 `scrypt` 与 HMAC-SHA256，未新增第三方 native 依赖。
 - 影响：LoongArch 目标环境只需验证 Node.js 22+ 内置加密模块可用；无需额外系统库。
 
+### 2026-05-02：Lint、Sourcery 与上传链路
+
+- 变更：新增 ESLint、Sourcery AI CI job、Multer 内存上传、本地 ObjectStore 和 artifacts 入库。
+- 依赖：ESLint 生态、`multer`、`@types/multer` 均为 JavaScript/TypeScript 依赖，未引入核心 native binary。
+- 影响：LoongArch 部署需验证 `STORAGE_ROOT` 目录权限、磁盘容量、文件名编码和 Node.js `crypto` SHA-256 计算；GitHub Actions 上的 Sourcery 仅用于远端自动审核，不属于目标服务器运行时依赖。
+
 后续每次发现平台差异时，在本文件追加：验证日期、目标环境版本、依赖版本、测试命令、结果和替代方案。

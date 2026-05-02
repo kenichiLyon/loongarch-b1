@@ -17,6 +17,7 @@
 - `esbuild`、`rollup` 等工具链包含平台相关 optional 包，lockfile 中应保留 linux-loong64 条目。
 - 新增依赖前必须确认是否包含 native binary；如包含，需在 `docs/LOONGARCH_COMPATIBILITY.md` 记录验证计划。
 - 核心业务链路优先选择纯 TypeScript/JavaScript 或可在通用 Linux 编译的依赖。
+- ESLint、Sourcery CI 配置、Multer 上传链路均不依赖额外 native binary；上传实现使用 Node.js 文件系统与内置加密模块。
 
 ## 新增依赖流程
 

@@ -97,6 +97,7 @@ AUTH_TOKEN_SECRET=dev-only-change-me-please
 AUTH_TOKEN_TTL_SECONDS=28800
 AUTH_BOOTSTRAP_TOKEN=dev-bootstrap-token
 STORAGE_ROOT=./storage
+UPLOAD_MAX_BYTES=20971520
 LLM_BASE_URL=https://example.invalid/v1
 LLM_API_KEY=
 LLM_MODEL=
@@ -120,6 +121,7 @@ pnpm dev
 
 ```bash
 pnpm --filter @loongarch-b1/api test
+pnpm lint
 pnpm build
 ```
 
@@ -142,6 +144,8 @@ pnpm build
 - `POST /courses/:courseId/classes`
 - `GET /rubrics`、`POST /rubrics`
 - `GET /experiments`、`POST /experiments`
+- `GET /submissions`、`POST /submissions`
+- `POST /submissions/:submissionId/artifacts/upload`
 
 除健康检查和登录/初始化接口外，基础管理接口均需要 Bearer Token；管理员可创建用户，管理员/教师可维护课程、班级、评价模板和实训任务。
 
@@ -160,6 +164,19 @@ curl -X POST http://localhost:3000/auth/bootstrap-admin \
 ```bash
 Authorization: Bearer <accessToken>
 ```
+
+### 上传提交物
+
+提交物上传使用本地对象存储，文件写入 `STORAGE_ROOT`，元数据写入 `artifacts` 表，并自动创建 `parse_artifact` 解析任务：
+
+```bash
+curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
+  -H "Authorization: Bearer <accessToken>" \
+  -F "kind=pdf" \
+  -F "file=@./report.pdf"
+```
+
+`UPLOAD_MAX_BYTES` 控制单文件大小，当前支持 `word`、`pdf`、`image`、`code_archive`、`other` 文件类型；`git_link` 将使用后续专用入口。
 
 ## 7. 核心业务流程
 
@@ -200,6 +217,7 @@ Authorization: Bearer <accessToken>
 
 - 推送 `main` 或手动触发时，GitHub Actions 会运行测试、构建前后端，并上传 auto build artifact。
 - 推送 `v*` tag 时，会额外创建 GitHub Release 并附带 Web/API/Docs 压缩包和 `BUILD_MANIFEST.json`。
+- CI/CD 均运行 `pnpm lint`；配置 `SOURCERY_TOKEN` 后，CI/CD 会执行 Sourcery AI 自动代码审核。
 - 发布细节见 `docs/RELEASE.md`。
 
 ## 11. 版本控制纪律
@@ -228,9 +246,11 @@ Authorization: Bearer <accessToken>
 - 数据库连接健康检查接口。
 - 用户、班级、课程、评价模板和实训任务基础 API。
 - 基于 scrypt 密码哈希与 HMAC Bearer Token 的登录、首个管理员初始化和 RBAC 守卫。
+- ESLint、CI/CD lint gate 与 Sourcery AI 自动代码审核入口。
+- 学生提交记录、本地 ObjectStore 文件上传、artifacts 入库和解析任务排队。
 
 下一步：
 
-1. 增加提交物上传与本地对象存储接口。
-2. 前置验证 LoongArch 关键依赖风险。
-3. 接入解析任务状态流与审计日志。
+1. 实现解析 worker 与 `extracted_contents` 写入。
+2. 前置验证 LoongArch 关键依赖风险扫描脚本。
+3. 接入上传/解析审计日志与教师可见的任务状态页。
