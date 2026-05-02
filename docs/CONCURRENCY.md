@@ -7,7 +7,7 @@
 - 上传接口使用 Multer 磁盘临时文件，不把完整文件长期保存在 Node.js 内存中。
 - 文件保存到 `STORAGE_ROOT` 后，只在数据库中记录 `storage_key`、hash、大小和状态。
 - 上传完成后创建 `jobs` 表任务，解析由独立 worker 消费，API 请求只负责入队。
-- 全部成果解析完成后自动创建 `evaluate_submission` 任务，评价 worker 独立构建脱敏摘要并调用 LLM Gateway，API 请求不等待模型响应。
+- 全部成果解析完成后自动创建 `evaluate_submission` 任务，评价 worker 独立执行确定性规则核查、构建脱敏摘要并调用 LLM Gateway，API 请求不等待模型响应。
 - 任务领取使用 PostgreSQL `FOR UPDATE SKIP LOCKED`，多个 worker 并发运行时不会领取同一条任务。
 - worker 每次按 `JOB_BATCH_SIZE` 批量领取任务，失败后按 `JOB_RETRY_DELAY_SECONDS` 延迟重试，超过 `max_attempts` 后标记失败。
 - `JOB_STALE_AFTER_SECONDS` 用于释放崩溃 worker 遗留的 `running` 任务，避免永久卡死。
@@ -61,7 +61,7 @@ JOB_RUN_ONCE=true JOB_WORKER_ID=evaluation-worker-1 pnpm worker:evaluate
 JOB_WORKER_ID=evaluation-worker-1 JOB_BATCH_SIZE=3 pnpm worker:evaluate
 ```
 
-LLM 调用属于外部 IO，应按模型服务吞吐能力独立设置评价 worker 数量；本地模型部署时建议先小批量验证显存/内存占用，再逐步提高 `JOB_BATCH_SIZE`。
+确定性规则核查是 CPU/内存轻量任务，可随评价 worker 批量执行；LLM 调用属于外部 IO，应按模型服务吞吐能力独立设置评价 worker 数量。本地模型部署时建议先小批量验证显存/内存占用，再逐步提高 `JOB_BATCH_SIZE`。
 
 ## 后续增强
 

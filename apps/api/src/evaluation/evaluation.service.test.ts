@@ -41,10 +41,10 @@ test('routes evaluation to teacher review when LLM gateway is not configured', a
             {
               id: '00000000-0000-0000-0000-000000000004',
               name: '功能实现度',
-              description: '功能覆盖',
+              description: '登录页面覆盖',
               weight: '100',
               maxScore: '100',
-              scoringRule: '检查功能',
+              scoringRule: '检查登录页面',
               sortOrder: 0,
             },
           ],
@@ -72,6 +72,7 @@ test('routes evaluation to teacher review when LLM gateway is not configured', a
   assert.equal(result.status, 'skipped');
   assert.equal(transactionQueries.some((query) => query.sql.includes('INSERT INTO evaluation_results')), true);
   assert.equal(transactionQueries.some((query) => query.sql.includes('INSERT INTO metric_scores')), true);
+  assert.equal(transactionQueries.find((query) => query.sql.includes('INSERT INTO metric_scores'))?.params[2], 0);
   assert.equal(transactionQueries.some((query) => query.sql.includes('INSERT INTO audit_logs')), true);
   assert.equal(
     transactionQueries.some((query) => query.params.includes('submission.evaluation_skipped')),
