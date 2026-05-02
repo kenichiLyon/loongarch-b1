@@ -1,7 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
+import { DatabaseHealthService } from './database/database-health.service';
 
 @Controller('health')
 export class HealthController {
+  constructor(private readonly databaseHealthService: DatabaseHealthService) {}
+
   @Get()
   getHealth() {
     return {
@@ -14,5 +17,10 @@ export class HealthController {
         platform: process.platform,
       },
     };
+  }
+
+  @Get('database')
+  getDatabaseHealth() {
+    return this.databaseHealthService.check();
   }
 }

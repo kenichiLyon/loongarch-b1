@@ -89,6 +89,7 @@ cp .env.example .env
 API_PORT=3000
 WEB_PORT=5173
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/loongarch_b1
+DATABASE_HEALTH_TIMEOUT_MS=3000
 STORAGE_ROOT=./storage
 LLM_BASE_URL=https://example.invalid/v1
 LLM_API_KEY=
@@ -106,6 +107,7 @@ pnpm dev
 默认端口：
 
 - 后端 API：`http://localhost:3000/health`
+- 数据库健康检查：`http://localhost:3000/health/database`
 - 前端 Web：`http://localhost:5173`
 
 ### 构建与测试
@@ -185,6 +187,7 @@ pnpm build
 - 核心 PostgreSQL 数据模型和初始迁移脚本。
 - 数据库迁移执行命令与迁移校验测试。
 - GitHub Actions CD 自动构建并上传发布产物。
+- 数据库连接健康检查接口。
 
 下一步：
 
