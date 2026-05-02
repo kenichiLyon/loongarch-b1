@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export interface StoreArtifactInput {
   submissionId: string;
   originalName: string;
-  buffer: Buffer;
+  buffer?: Buffer;
+  sourcePath?: string;
   now?: Date;
 }
 
@@ -19,23 +21,29 @@ export interface StoredObject {
 @Injectable()
 export class LocalObjectStoreService {
   async storeArtifact(input: StoreArtifactInput): Promise<StoredObject> {
-    const sha256 = createHash('sha256').update(input.buffer).digest('hex');
+    const sha256 = input.buffer ? createHash('sha256').update(input.buffer).digest('hex') : await hashFile(input.sourcePath);
+    const sizeBytes = input.buffer?.byteLength ?? (await statFile(input.sourcePath)).size;
     const storageKey = buildArtifactStorageKey({ ...input, sha256 });
-    const root = getStorageRoot();
-    const target = path.resolve(root, storageKey);
-
-    if (!target.startsWith(`${root}${path.sep}`)) {
-      throw new Error('Resolved storage path escaped STORAGE_ROOT');
-    }
+    const target = resolveStoragePath(storageKey);
 
     await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, input.buffer);
+    if (input.buffer) {
+      await writeFile(target, input.buffer);
+    } else if (input.sourcePath) {
+      await copyFile(input.sourcePath, target);
+    } else {
+      throw new Error('Either buffer or sourcePath is required to store an artifact');
+    }
 
     return {
       storageKey: normalizeStorageKey(storageKey),
       sha256,
-      sizeBytes: input.buffer.byteLength,
+      sizeBytes,
     };
+  }
+
+  async readObject(storageKey: string) {
+    return readFile(resolveStoragePath(storageKey));
   }
 }
 
@@ -65,4 +73,37 @@ export function sanitizeFileName(name: string) {
 
 function normalizeStorageKey(value: string) {
   return value.split(path.sep).join('/');
+}
+
+function resolveStoragePath(storageKey: string) {
+  const root = getStorageRoot();
+  const target = path.resolve(root, storageKey);
+
+  if (target !== root && !target.startsWith(`${root}${path.sep}`)) {
+    throw new Error('Resolved storage path escaped STORAGE_ROOT');
+  }
+
+  return target;
+}
+
+async function hashFile(sourcePath: string | undefined) {
+  if (!sourcePath) {
+    throw new Error('sourcePath is required when buffer is not provided');
+  }
+
+  const hash = createHash('sha256');
+  await new Promise<void>((resolve, reject) => {
+    const stream = createReadStream(sourcePath);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('error', reject);
+    stream.on('end', resolve);
+  });
+  return hash.digest('hex');
+}
+
+async function statFile(sourcePath: string | undefined) {
+  if (!sourcePath) {
+    throw new Error('sourcePath is required when buffer is not provided');
+  }
+  return stat(sourcePath);
 }

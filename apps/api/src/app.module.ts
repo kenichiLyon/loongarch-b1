@@ -5,6 +5,7 @@ import { DatabaseModule } from './database/database.module';
 import { FoundationModule } from './foundation/foundation.module';
 import { HealthController } from './health.controller';
 import { SubmissionsModule } from './submissions/submissions.module';
+import { WorkersModule } from './workers/workers.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { SubmissionsModule } from './submissions/submissions.module';
     DatabaseModule,
     FoundationModule,
     SubmissionsModule,
+    WorkersModule,
   ],
   controllers: [HealthController],
 })

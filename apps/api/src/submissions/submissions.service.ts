@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { unlink } from 'node:fs/promises';
 import type { PoolClient, QueryResultRow } from 'pg';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { DatabaseService } from '../database/database.service';
@@ -83,40 +84,45 @@ export class SubmissionsService {
   }
 
   async uploadArtifact(submissionId: string, dto: UploadArtifactDto, file: UploadFileLike, user: AuthenticatedUser) {
-    const submission = await this.getSubmissionForUser(submissionId, user);
-    const metadata = validateArtifactUpload(dto.kind, file);
-    const stored = await this.objectStore.storeArtifact({
-      submissionId: submission.id,
-      originalName: metadata.originalName,
-      buffer: file.buffer as Buffer,
-    });
-
-    return this.database.withTransaction(async (client) => {
-      const artifact = await insertArtifact(client, {
+    try {
+      const submission = await this.getSubmissionForUser(submissionId, user);
+      const metadata = validateArtifactUpload(dto.kind, file);
+      const stored = await this.objectStore.storeArtifact({
         submissionId: submission.id,
-        kind: dto.kind,
         originalName: metadata.originalName,
-        mimeType: metadata.mimeType,
-        sizeBytes: stored.sizeBytes,
-        sha256: stored.sha256,
-        storageKey: stored.storageKey,
+        buffer: file.buffer,
+        sourcePath: file.path,
       });
 
-      await client.query(
-        `INSERT INTO jobs (job_type, payload)
-         VALUES ('parse_artifact', $1::jsonb)`,
-        [JSON.stringify({ artifactId: artifact.id, submissionId: submission.id })],
-      );
+      return await this.database.withTransaction(async (client) => {
+        const artifact = await insertArtifact(client, {
+          submissionId: submission.id,
+          kind: dto.kind,
+          originalName: metadata.originalName,
+          mimeType: metadata.mimeType,
+          sizeBytes: stored.sizeBytes,
+          sha256: stored.sha256,
+          storageKey: stored.storageKey,
+        });
 
-      await client.query(
-        `UPDATE submissions
-            SET status = 'parsing', updated_at = now()
-          WHERE id = $1`,
-        [submission.id],
-      );
+        await client.query(
+          `INSERT INTO jobs (job_type, payload)
+           VALUES ('parse_artifact', $1::jsonb)`,
+          [JSON.stringify({ artifactId: artifact.id, submissionId: submission.id })],
+        );
 
-      return artifact;
-    });
+        await client.query(
+          `UPDATE submissions
+              SET status = 'parsing', updated_at = now()
+            WHERE id = $1`,
+          [submission.id],
+        );
+
+        return artifact;
+      });
+    } finally {
+      await removeTemporaryUpload(file.path);
+    }
   }
 
   private async getSubmissionForUser(submissionId: string, user: AuthenticatedUser) {
@@ -138,6 +144,18 @@ export class SubmissionsService {
     }
 
     return submission;
+  }
+}
+
+async function removeTemporaryUpload(filePath: string | undefined) {
+  if (!filePath) {
+    return;
+  }
+
+  try {
+    await unlink(filePath);
+  } catch {
+    // Cleanup is best-effort; persisted artifacts and DB state should not be rolled back by temp-file deletion failures.
   }
 }
 

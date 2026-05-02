@@ -50,6 +50,7 @@ apps/
   web/      Vue 3 前端应用
 docs/
   ARCHITECTURE.md              架构概要
+  CONCURRENCY.md               高并发与异步任务策略
   DATA_MODEL.md                核心数据模型
   DATABASE_MIGRATIONS.md       数据库迁移说明
   DEPENDENCY_POLICY.md         依赖锁定策略
@@ -98,6 +99,11 @@ AUTH_TOKEN_TTL_SECONDS=28800
 AUTH_BOOTSTRAP_TOKEN=dev-bootstrap-token
 STORAGE_ROOT=./storage
 UPLOAD_MAX_BYTES=20971520
+PARSER_MAX_TEXT_CHARS=60000
+JOB_BATCH_SIZE=5
+JOB_POLL_INTERVAL_MS=2000
+JOB_RETRY_DELAY_SECONDS=30
+JOB_STALE_AFTER_SECONDS=900
 LLM_BASE_URL=https://example.invalid/v1
 LLM_API_KEY=
 LLM_MODEL=
@@ -124,6 +130,16 @@ pnpm --filter @loongarch-b1/api test
 pnpm lint
 pnpm build
 ```
+
+### 解析 Worker
+
+上传接口只负责保存文件和创建 `parse_artifact` 任务，解析由独立 worker 消费：
+
+```bash
+JOB_RUN_ONCE=true pnpm worker:parse
+```
+
+生产部署可启动多个 worker 实例并发消费；任务领取使用 PostgreSQL `FOR UPDATE SKIP LOCKED` 避免重复处理。
 
 当前脚手架验证目标：
 
@@ -176,7 +192,7 @@ curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
   -F "file=@./report.pdf"
 ```
 
-`UPLOAD_MAX_BYTES` 控制单文件大小，当前支持 `word`、`pdf`、`image`、`code_archive`、`other` 文件类型；`git_link` 将使用后续专用入口。
+`UPLOAD_MAX_BYTES` 控制单文件大小，当前支持 `word`、`pdf`、`image`、`code_archive`、`other` 文件类型；`git_link` 将使用后续专用入口。上传使用磁盘临时文件，避免高并发时把完整文件压在 Node.js 内存中。
 
 ## 7. 核心业务流程
 
@@ -220,7 +236,15 @@ curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
 - CI/CD 均运行 `pnpm lint`；配置 `SOURCERY_TOKEN` 后，CI/CD 会执行 Sourcery AI 自动代码审核。
 - 发布细节见 `docs/RELEASE.md`。
 
-## 11. 版本控制纪律
+## 11. 高并发策略
+
+- API 上传链路：文件先落磁盘临时区，再写入本地 ObjectStore，数据库只保存元数据。
+- 异步任务：上传后创建 `jobs`，解析 worker 独立消费，避免请求线程执行重解析。
+- 并发领取：worker 使用 `FOR UPDATE SKIP LOCKED` 批量领取任务，支持多实例横向扩展。
+- 失败治理：任务失败会延迟重试，超出 `max_attempts` 后进入失败状态；stale running job 会被释放回队列。
+- 详细策略见 `docs/CONCURRENCY.md`。
+
+## 12. 版本控制纪律
 
 本项目遵循 `AGENT.md`：
 
@@ -230,7 +254,7 @@ curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
 - Commit message 使用 Conventional Commits。
 - 每次提交前至少运行与变更范围相关的最小检查。
 
-## 12. 当前状态
+## 13. 当前状态
 
 当前已完成：
 
@@ -248,9 +272,10 @@ curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
 - 基于 scrypt 密码哈希与 HMAC Bearer Token 的登录、首个管理员初始化和 RBAC 守卫。
 - ESLint、CI/CD lint gate 与 Sourcery AI 自动代码审核入口。
 - 学生提交记录、本地 ObjectStore 文件上传、artifacts 入库和解析任务排队。
+- 高并发安全的 PostgreSQL job claiming、解析 worker、`extracted_contents` 写入和任务重试/释放机制。
 
 下一步：
 
-1. 实现解析 worker 与 `extracted_contents` 写入。
-2. 前置验证 LoongArch 关键依赖风险扫描脚本。
-3. 接入上传/解析审计日志与教师可见的任务状态页。
+1. 前置验证 LoongArch 关键依赖风险扫描脚本。
+2. 接入上传/解析审计日志与教师可见的任务状态页。
+3. 扩展 Word/PDF/OCR/代码包真实解析器与解析回归样例。

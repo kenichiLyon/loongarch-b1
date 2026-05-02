@@ -36,4 +36,10 @@
 - 依赖：ESLint 生态、`multer`、`@types/multer` 均为 JavaScript/TypeScript 依赖，未引入核心 native binary。
 - 影响：LoongArch 部署需验证 `STORAGE_ROOT` 目录权限、磁盘容量、文件名编码和 Node.js `crypto` SHA-256 计算；GitHub Actions 上的 Sourcery 仅用于远端自动审核，不属于目标服务器运行时依赖。
 
+### 2026-05-02：解析 worker 与高并发 jobs 队列
+
+- 变更：新增 `pnpm worker:parse`、PostgreSQL `FOR UPDATE SKIP LOCKED` 任务领取、失败重试、stale running job 释放和解析内容入库。
+- 依赖：仅使用 Node.js 内置文件系统/crypto 与 PostgreSQL 行锁能力，未新增第三方运行时依赖。
+- 影响：目标环境需验证 PostgreSQL 版本支持 `SKIP LOCKED`，并按 worker 数量调整 `DATABASE_POOL_MAX`、PostgreSQL `max_connections` 和 `STORAGE_ROOT` IO 能力。
+
 后续每次发现平台差异时，在本文件追加：验证日期、目标环境版本、依赖版本、测试命令、结果和替代方案。

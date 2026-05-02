@@ -11,7 +11,8 @@
     "lint": "eslint . --max-warnings=0",
     "test": "pnpm -r test",
     "check": "pnpm lint && pnpm typecheck && pnpm build",
-    "db:migrate": "pnpm --filter @loongarch-b1/api db:migrate"
+    "db:migrate": "pnpm --filter @loongarch-b1/api db:migrate",
+    "worker:parse": "pnpm --filter @loongarch-b1/api worker:parse"
   },
   "engines": {
     "node": ">=22 <25",

@@ -50,6 +50,7 @@
 - 一个提交包含多个成果文件，一个成果文件可以产生多个解析片段。
 - 一个提交最多有一个当前评价结果；评价结果包含多条指标得分和核查发现。
 - 报表导出记录操作者、筛选条件、生成状态和对象存储 key。
+- 后台任务通过 `jobs.run_after`、`locked_at`、`locked_by`、`attempts` 和 `max_attempts` 支持延迟重试、多 worker 并发领取和崩溃恢复。
 
 ## 5. 首版查询场景
 
@@ -61,4 +62,4 @@
 
 ## 6. 迁移脚本
 
-初版 SQL 位于 `apps/api/migrations/001_initial_schema.sql`。该脚本只定义数据库结构，不写入演示数据；演示数据后续放在 `fixtures/demo-data`。
+初版 SQL 位于 `apps/api/migrations/001_initial_schema.sql`。并发任务索引位于 `apps/api/migrations/002_job_queue_concurrency.sql`。迁移脚本只定义数据库结构，不写入演示数据；演示数据后续放在 `fixtures/demo-data`。

@@ -26,3 +26,8 @@ pnpm db:migrate
 - SQL 文件可直接在 LoongArch + 银河麒麟目标环境审计和执行。
 - 不依赖 Prisma 等可能带来平台 binary 兼容风险的工具。
 - 适合当前 MVP 阶段的 PostgreSQL-first 架构。
+
+## 当前迁移
+
+- `001_initial_schema.sql`：创建用户、课程、提交、成果、评价、报表、任务和审计等核心表。
+- `002_job_queue_concurrency.sql`：补充任务领取、stale running job 释放和 artifact 状态查询所需索引，支撑多 worker 并发消费。

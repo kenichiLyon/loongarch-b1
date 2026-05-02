@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
-import { buildArtifactStorageKey, sanitizeFileName } from './local-object-store.service';
+import { buildArtifactStorageKey, LocalObjectStoreService, sanitizeFileName } from './local-object-store.service';
 
 test('sanitizes uploaded file names before storing them', () => {
   assert.equal(sanitizeFileName('../unsafe/report?.pdf'), 'report-.pdf');
@@ -17,4 +20,33 @@ test('builds stable storage keys under the artifact prefix', () => {
   });
 
   assert.equal(key, 'artifacts/2026/05/00000000-0000-0000-0000-000000000001/1234567890abcdef-报告.pdf');
+});
+
+test('stores artifact files from disk without buffering uploads in memory', async () => {
+  const previousStorageRoot = process.env.STORAGE_ROOT;
+  const root = await mkdtemp(path.join(os.tmpdir(), 'loongarch-b1-store-'));
+  const objectRoot = path.join(root, 'objects');
+  const source = path.join(root, 'source.txt');
+  process.env.STORAGE_ROOT = objectRoot;
+
+  try {
+    await writeFile(source, 'hello');
+    const service = new LocalObjectStoreService();
+    const result = await service.storeArtifact({
+      submissionId: '00000000-0000-0000-0000-000000000001',
+      originalName: 'source.txt',
+      sourcePath: source,
+      now: new Date('2026-05-02T00:00:00.000Z'),
+    });
+
+    assert.equal(result.sizeBytes, 5);
+    assert.equal(await readFile(path.join(objectRoot, result.storageKey), 'utf8'), 'hello');
+  } finally {
+    if (previousStorageRoot === undefined) {
+      delete process.env.STORAGE_ROOT;
+    } else {
+      process.env.STORAGE_ROOT = previousStorageRoot;
+    }
+    await rm(root, { recursive: true, force: true });
+  }
 });

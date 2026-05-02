@@ -42,4 +42,5 @@ Release 资产包含 web/api/docs 三个压缩包和 `BUILD_MANIFEST.json`。
 - Web 产物是静态文件，后续部署到 Nginx 或后端静态服务。
 - API 产物不包含 `node_modules`，目标环境需按 `pnpm-lock.yaml` 安装生产依赖或使用后续容器镜像。
 - 数据库迁移 SQL 随 API 产物一起发布，部署时执行 `pnpm db:migrate`。
+- 解析 worker 使用同一 API 产物启动，命令为 `pnpm worker:parse`；生产环境可通过 systemd 启动多个 worker 实例。
 - LoongArch 上仍需按 `docs/LOONGARCH_COMPATIBILITY.md` 验证 Node.js、pnpm、PostgreSQL 和 native optional 依赖。

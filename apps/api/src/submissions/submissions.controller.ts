@@ -1,17 +1,24 @@
 import { Body, Controller, Get, Param, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+import { randomUUID } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { diskStorage } from 'multer';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { UserRole } from '../domain/core';
+import { sanitizeFileName } from '../storage/local-object-store.service';
 import { readUploadMaxBytes } from './artifact-upload.policy';
 import { CreateSubmissionDto, UploadArtifactDto } from './submissions.dto';
 import { SubmissionsService } from './submissions.service';
 
 const multerUploadLimit = Number(process.env.UPLOAD_MAX_BYTES ?? 20 * 1024 * 1024);
+const uploadTempRoot = path.join(os.tmpdir(), 'loongarch-b1-uploads');
+mkdirSync(uploadTempRoot, { recursive: true });
 
 @Controller('submissions')
 @UseGuards(AuthGuard, RolesGuard)
@@ -38,7 +45,12 @@ export class SubmissionsController {
   @Post(':submissionId/artifacts/upload')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: memoryStorage(),
+      storage: diskStorage({
+        destination: uploadTempRoot,
+        filename: (_request, file, callback) => {
+          callback(null, `${Date.now()}-${randomUUID()}-${sanitizeFileName(file.originalname)}`);
+        },
+      }),
       limits: { fileSize: multerUploadLimit || readUploadMaxBytes() },
     }),
   )

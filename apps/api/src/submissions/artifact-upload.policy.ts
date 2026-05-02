@@ -7,6 +7,7 @@ export interface UploadFileLike {
   mimetype?: string;
   size: number;
   buffer?: Buffer;
+  path?: string;
 }
 
 export interface ValidatedArtifactFile {
@@ -49,13 +50,13 @@ export function validateArtifactUpload(kind: ArtifactKind, file: UploadFileLike 
   if (!file) {
     throw new BadRequestException('Multipart field "file" is required');
   }
-  if (!file.buffer || file.buffer.byteLength === 0) {
+  if (file.size <= 0 || (file.buffer && file.buffer.byteLength === 0)) {
     throw new BadRequestException('Uploaded file is empty');
   }
   if (kind === ArtifactKind.GitLink) {
     throw new BadRequestException('Git links must be submitted through the Git link endpoint');
   }
-  if (file.size > maxBytes || file.buffer.byteLength > maxBytes) {
+  if (file.size > maxBytes || (file.buffer && file.buffer.byteLength > maxBytes)) {
     throw new BadRequestException(`Uploaded file exceeds max size ${maxBytes} bytes`);
   }
 
@@ -74,7 +75,7 @@ export function validateArtifactUpload(kind: ArtifactKind, file: UploadFileLike 
   return {
     originalName,
     mimeType,
-    sizeBytes: file.buffer.byteLength,
+    sizeBytes: file.buffer?.byteLength ?? file.size,
   };
 }
 

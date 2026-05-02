@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/**/*.test.ts",
-    "db:migrate": "tsx src/database/migrate.ts"
+    "db:migrate": "tsx src/database/migrate.ts",
+    "worker:parse": "tsx src/workers/parse-artifacts.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.1.19",
