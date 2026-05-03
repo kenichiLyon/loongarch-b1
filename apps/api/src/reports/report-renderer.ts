@@ -41,6 +41,8 @@ interface ZipEntry {
   content: Buffer;
 }
 
+type WorksheetCell = string | number;
+
 const xlsxMimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 export function renderReportDocument(input: RenderReportInput) {
@@ -112,10 +114,10 @@ function renderXlsx(input: RenderReportInput) {
           ...input.statistics.metrics.map((metric) => [
             metric.rubricMetricId,
             metric.metricName,
-            valueToCell(metric.averageFinalScore),
-            valueToCell(metric.averageTeacherScore),
-            valueToCell(metric.averageAiScore),
-            valueToCell(metric.averageRuleScore),
+            metric.averageFinalScore ?? '',
+            metric.averageTeacherScore ?? '',
+            metric.averageAiScore ?? '',
+            metric.averageRuleScore ?? '',
           ]),
         ]),
       ),
@@ -125,7 +127,7 @@ function renderXlsx(input: RenderReportInput) {
       content: xmlBuffer(
         renderWorksheet([
           ['findingType', 'severity', 'count'],
-          ...input.statistics.findings.map((finding) => [finding.findingType, finding.severity, String(finding.count)]),
+          ...input.statistics.findings.map((finding) => [finding.findingType, finding.severity, finding.count]),
         ]),
       ),
     },
@@ -138,21 +140,24 @@ function buildSummaryRows(input: RenderReportInput) {
   return [
     ['reportType', input.reportType],
     ['generatedAt', input.statistics.generatedAt],
-    ['publishedCount', String(input.statistics.summary.publishedCount)],
-    ['averageScore', valueToCell(input.statistics.summary.averageScore)],
-    ['minScore', valueToCell(input.statistics.summary.minScore)],
-    ['maxScore', valueToCell(input.statistics.summary.maxScore)],
+    ['publishedCount', input.statistics.summary.publishedCount],
+    ['averageScore', input.statistics.summary.averageScore ?? ''],
+    ['minScore', input.statistics.summary.minScore ?? ''],
+    ['maxScore', input.statistics.summary.maxScore ?? ''],
     ['filters', JSON.stringify(input.statistics.filters)],
   ];
 }
 
-function renderWorksheet(rows: string[][]) {
+function renderWorksheet(rows: WorksheetCell[][]) {
   const rowXml = rows
     .map((row, rowIndex) => {
       const cellXml = row
         .map((value, columnIndex) => {
           const ref = `${columnName(columnIndex + 1)}${rowIndex + 1}`;
-          return `<c r="${ref}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
+          if (typeof value === 'number' && Number.isFinite(value)) {
+            return `<c r="${ref}"><v>${value}</v></c>`;
+          }
+          return `<c r="${ref}" t="inlineStr"><is><t>${escapeXml(String(value))}</t></is></c>`;
         })
         .join('');
       return `<row r="${rowIndex + 1}">${cellXml}</row>`;
@@ -195,11 +200,14 @@ function renderPdf(input: RenderReportInput) {
 
   const chunks: Buffer[] = [Buffer.from('%PDF-1.4\n', 'ascii')];
   const offsets: number[] = [0];
+  let currentOffset = chunks[0].byteLength;
   for (const [index, object] of objects.entries()) {
-    offsets.push(Buffer.concat(chunks).byteLength);
-    chunks.push(Buffer.from(`${index + 1} 0 obj\n${object}\nendobj\n`, 'ascii'));
+    offsets.push(currentOffset);
+    const objectBuffer = Buffer.from(`${index + 1} 0 obj\n${object}\nendobj\n`, 'ascii');
+    chunks.push(objectBuffer);
+    currentOffset += objectBuffer.byteLength;
   }
-  const xrefOffset = Buffer.concat(chunks).byteLength;
+  const xrefOffset = currentOffset;
   chunks.push(Buffer.from(`xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`, 'ascii'));
   for (const offset of offsets.slice(1)) {
     chunks.push(Buffer.from(`${String(offset).padStart(10, '0')} 00000 n \n`, 'ascii'));

@@ -31,6 +31,7 @@ test('renders xlsx report as an OpenXML zip payload', () => {
   assert.equal(result.mimeType, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   assert.equal(result.buffer.subarray(0, 4).toString('hex'), '504b0304');
   assert.equal(result.buffer.includes(Buffer.from('xl/workbook.xml')), true);
+  assert.equal(result.buffer.includes(Buffer.from('<c r="C2"><v>90</v></c>')), true);
 });
 
 test('renders pdf report as a minimal PDF payload', () => {
