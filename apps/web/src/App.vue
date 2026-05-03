@@ -1,48 +1,410 @@
 <template>
   <main class="shell">
     <section class="hero">
-      <p class="eyebrow">LoongArch · Kylin · LLM Assisted Assessment</p>
-      <h1>软件实训成果智能核查评价与报表系统</h1>
-      <p class="summary">
-        面向学生提交、教师复核和课程统计的 PC Web 工作台，首版聚焦上传解析、规则核查、AI 初评、教师确认与报表导出闭环。
-      </p>
-      <div class="actions">
-        <button>开始配置实训任务</button>
-        <span>第 0 周治理已启动，下一步初始化业务模型。</span>
+      <div class="hero__content">
+        <p class="eyebrow">LoongArch · Kylin · LLM Assisted Assessment</p>
+        <h1>软件实训成果智能核查评价与报表系统</h1>
+        <p class="summary">
+          面向学生提交、教师复核和课程统计的 PC Web 工作台，打通上传解析、规则核查、AI 初评、教师确认与报表导出闭环。
+        </p>
       </div>
+      <form class="login-panel" @submit.prevent="handleLogin">
+        <div>
+          <span class="panel-kicker">API 工作台</span>
+          <h2>连接后端服务</h2>
+          <p>{{ apiBaseUrl }}</p>
+        </div>
+        <label>
+          用户名
+          <input v-model="loginForm.username" autocomplete="username" placeholder="admin / teacher / student" />
+        </label>
+        <label>
+          密码
+          <input v-model="loginForm.password" autocomplete="current-password" placeholder="至少 8 位" type="password" />
+        </label>
+        <div class="actions">
+          <button :disabled="isBusy" type="submit">{{ isBusy ? '连接中...' : '登录并刷新' }}</button>
+          <button class="ghost-button" type="button" @click="refreshDashboard">刷新状态</button>
+        </div>
+        <p v-if="sessionUser" class="session-line">当前用户：{{ sessionUser.displayName }} · {{ roleLabel(sessionUser.role) }}</p>
+        <p v-else class="session-line">可先用 README 的 bootstrap-admin 初始化管理员。</p>
+      </form>
     </section>
 
-    <section class="grid" aria-label="核心能力">
-      <article v-for="item in capabilities" :key="item.title" class="card">
-        <span class="index">{{ item.index }}</span>
-        <h2>{{ item.title }}</h2>
-        <p>{{ item.description }}</p>
+    <section class="status-strip" aria-label="系统状态">
+      <article v-for="item in statusCards" :key="item.label" class="status-card">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+        <small>{{ item.hint }}</small>
+      </article>
+    </section>
+
+    <section v-if="viewError" class="notice notice--error" role="alert">
+      <strong>接口暂不可用：</strong>{{ viewError }}
+      <span>页面保留空态，便于 amd64 开发机和 LoongArch 目标机分别联调。</span>
+    </section>
+
+    <section class="workspace-grid" aria-label="工作台">
+      <article class="work-card work-card--wide">
+        <header class="card-header">
+          <div>
+            <span class="panel-kicker">Teacher Review</span>
+            <h2>教师复核队列</h2>
+          </div>
+          <span class="badge">{{ submissions.length }} 份提交</span>
+        </header>
+
+        <div v-if="submissions.length === 0" class="empty-state">
+          暂无提交记录。创建课程、实训任务和提交物后，这里会显示复核入口。
+        </div>
+        <div v-else class="submission-layout">
+          <ul class="submission-list">
+            <li v-for="submission in submissions" :key="submission.id">
+              <button
+                :class="{ 'is-active': submission.id === selectedSubmissionId }"
+                type="button"
+                @click="selectSubmission(submission.id)"
+              >
+                <span>提交 #{{ shortId(submission.id) }}</span>
+                <strong>{{ statusLabel(submission.status) }}</strong>
+                <small>第 {{ submission.attemptNo }} 次 · {{ formatDate(submission.updatedAt) }}</small>
+              </button>
+            </li>
+          </ul>
+
+          <div class="evaluation-panel">
+            <template v-if="evaluation">
+              <div class="score-board">
+                <span>最终分</span>
+                <strong>{{ scoreText(evaluation.finalScore) }}</strong>
+                <small>{{ evaluation.status }}</small>
+              </div>
+              <div class="metric-grid">
+                <article v-for="metric in evaluation.metricScores" :key="metric.rubricMetricId">
+                  <span>{{ metric.metricName ?? shortId(metric.rubricMetricId) }}</span>
+                  <strong>{{ scoreText(metric.finalScore ?? metric.teacherScore ?? metric.aiScore ?? metric.ruleScore) }}</strong>
+                  <small>规则 {{ scoreText(metric.ruleScore) }} · AI {{ scoreText(metric.aiScore) }}</small>
+                </article>
+              </div>
+              <div class="review-box">
+                <textarea v-model="teacherComment" placeholder="填写教师总评，保存后可发布结果。" />
+                <div class="actions">
+                  <button :disabled="isBusy || !selectedSubmissionId" type="button" @click="saveReview">保存复核意见</button>
+                  <button class="ghost-button" :disabled="isBusy || !selectedSubmissionId" type="button" @click="publishReview">
+                    发布给学生
+                  </button>
+                </div>
+              </div>
+            </template>
+            <div v-else class="empty-state">选择一份提交后查看 AI/规则初评和教师复核入口。</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="work-card">
+        <header class="card-header">
+          <div>
+            <span class="panel-kicker">Async Jobs</span>
+            <h2>高并发任务池</h2>
+          </div>
+          <span class="badge">{{ runningJobCount }} 运行中</span>
+        </header>
+        <ul v-if="jobs.length > 0" class="timeline-list">
+          <li v-for="job in jobs" :key="job.id">
+            <span :class="['dot', `dot--${job.status}`]"></span>
+            <div>
+              <strong>{{ jobTypeLabel(job.jobType) }}</strong>
+              <small>{{ statusLabel(job.status) }} · {{ job.attempts }}/{{ job.maxAttempts }} · {{ formatDate(job.updatedAt) }}</small>
+              <p v-if="job.errorMessage">{{ job.errorMessage }}</p>
+            </div>
+          </li>
+        </ul>
+        <div v-else class="empty-state">暂无异步任务。上传、评价、报表导出都会进入 PostgreSQL 队列。</div>
+      </article>
+
+      <article class="work-card">
+        <header class="card-header">
+          <div>
+            <span class="panel-kicker">Reports</span>
+            <h2>统计与导出</h2>
+          </div>
+          <span class="badge">Excel / PDF</span>
+        </header>
+        <div class="report-chart" aria-label="平均分概览">
+          <div class="ring" :style="{ '--score': averageScorePercent }">
+            <span>{{ scoreText(statistics?.summary.averageScore) }}</span>
+          </div>
+          <div>
+            <strong>{{ statistics?.summary.publishedCount ?? 0 }} 份已发布</strong>
+            <small>最低 {{ scoreText(statistics?.summary.minScore) }} · 最高 {{ scoreText(statistics?.summary.maxScore) }}</small>
+          </div>
+        </div>
+        <div class="actions">
+          <button :disabled="isBusy" type="button" @click="createExport('course', 'xlsx')">生成 Excel</button>
+          <button class="ghost-button" :disabled="isBusy" type="button" @click="createExport('course', 'pdf')">生成 PDF</button>
+        </div>
+        <ul v-if="reportExports.length > 0" class="export-list">
+          <li v-for="item in reportExports" :key="item.id">
+            <span>{{ item.reportType }} · {{ item.format }}</span>
+            <strong>{{ statusLabel(item.status) }}</strong>
+            <small>{{ item.storageKey ?? item.errorMessage ?? formatDate(item.createdAt) }}</small>
+          </li>
+        </ul>
+        <div v-else class="empty-state">暂无导出记录。导出任务会异步生成并写入对象存储。</div>
+      </article>
+
+      <article class="work-card work-card--wide">
+        <header class="card-header">
+          <div>
+            <span class="panel-kicker">Findings & Audit</span>
+            <h2>核查发现与审计留痕</h2>
+          </div>
+          <span class="badge">可追溯</span>
+        </header>
+        <div class="audit-layout">
+          <ul v-if="evaluation?.findings.length" class="finding-list">
+            <li v-for="finding in evaluation.findings" :key="`${finding.findingType}-${finding.evidence}`">
+              <strong>{{ findingTypeLabel(finding.findingType) }} · {{ severityLabel(finding.severity) }}</strong>
+              <p>{{ finding.evidence }}</p>
+              <small>{{ finding.suggestion }}</small>
+            </li>
+          </ul>
+          <div v-else class="empty-state">暂无核查发现；规则核查和 LLM 初评完成后会在这里聚合。</div>
+
+          <ul v-if="auditLogs.length > 0" class="timeline-list">
+            <li v-for="log in auditLogs" :key="log.id">
+              <span class="dot dot--audit"></span>
+              <div>
+                <strong>{{ log.action }}</strong>
+                <small>{{ log.actorDisplayName ?? '系统' }} · {{ log.entityType }} · {{ formatDate(log.createdAt) }}</small>
+              </div>
+            </li>
+          </ul>
+          <div v-else class="empty-state">暂无审计日志。上传、解析、复核、发布和导出都会留痕。</div>
+        </div>
       </article>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-const capabilities = [
+import { computed, onMounted, reactive, ref } from 'vue';
+import { ApiClient, ApiClientError, getDefaultApiBaseUrl } from './services/api-client';
+import type { AuditLog, Evaluation, Job, ReportExport, ReportStatistics, Submission, UserRole } from './types/api';
+
+const apiClient = new ApiClient();
+const apiBaseUrl = getDefaultApiBaseUrl();
+
+const loginForm = reactive({
+  username: '',
+  password: '',
+});
+const isBusy = ref(false);
+const viewError = ref('');
+const sessionUser = ref<{ displayName: string; role: UserRole } | null>(null);
+const submissions = ref<Submission[]>([]);
+const jobs = ref<Job[]>([]);
+const auditLogs = ref<AuditLog[]>([]);
+const statistics = ref<ReportStatistics | null>(null);
+const reportExports = ref<ReportExport[]>([]);
+const evaluation = ref<Evaluation | null>(null);
+const selectedSubmissionId = ref('');
+const teacherComment = ref('');
+
+const runningJobCount = computed(() => jobs.value.filter((job) => job.status === 'running').length);
+const averageScorePercent = computed(() => {
+  const score = Number(statistics.value?.summary.averageScore ?? 0);
+  return `${Math.max(0, Math.min(100, score))}%`;
+});
+const statusCards = computed(() => [
   {
-    index: '01',
-    title: '成果上传与解析',
-    description: '接收 Word、PDF、截图、代码包与 Git 链接，先确定性解析，再生成脱敏摘要。',
+    label: '已发布评价',
+    value: statistics.value?.summary.publishedCount ?? 0,
+    hint: '进入报表统计的评价结果',
   },
   {
-    index: '02',
-    title: '规则核查 + LLM 初评',
-    description: '规则引擎核查完整性，大模型辅助识别要求覆盖、逻辑风险和改进建议。',
+    label: '平均分',
+    value: scoreText(statistics.value?.summary.averageScore),
+    hint: '课程 / 班级可按筛选扩展',
   },
   {
-    index: '03',
-    title: '教师复核确认',
-    description: '教师逐项改分、写评语并确认最终成绩，智能评价不直接替代人工裁定。',
+    label: '任务积压',
+    value: jobs.value.filter((job) => job.status === 'queued').length,
+    hint: '解析、评价、导出异步排队',
   },
   {
-    index: '04',
-    title: '报表导出与审计',
-    description: '生成学生、班级、课程统计报表，导出 Excel/PDF 并记录生成条件。',
+    label: '复核队列',
+    value: submissions.value.filter((submission) => submission.status === 'teacher_review').length,
+    hint: '教师确认后才能发布',
   },
-];
+]);
+
+onMounted(() => {
+  void refreshDashboard();
+});
+
+async function handleLogin() {
+  await withBusy(async () => {
+    viewError.value = '';
+    const session = await apiClient.login(loginForm.username, loginForm.password);
+    sessionUser.value = session.user;
+    await refreshDashboard();
+  });
+}
+
+async function refreshDashboard() {
+  await withBusy(async () => {
+    viewError.value = '';
+    const snapshot = await apiClient.loadDashboardSnapshot(selectedSubmissionId.value);
+    sessionUser.value = snapshot.me ? { displayName: snapshot.me.displayName, role: snapshot.me.role } : null;
+    submissions.value = snapshot.submissions;
+    jobs.value = snapshot.jobs;
+    auditLogs.value = snapshot.auditLogs;
+    statistics.value = snapshot.statistics;
+    reportExports.value = snapshot.exports;
+    evaluation.value = snapshot.evaluation;
+    selectedSubmissionId.value = snapshot.evaluation?.submissionId ?? snapshot.submissions[0]?.id ?? '';
+    teacherComment.value = snapshot.evaluation?.teacherComment ?? '';
+  });
+}
+
+async function selectSubmission(submissionId: string) {
+  await withBusy(async () => {
+    selectedSubmissionId.value = submissionId;
+    evaluation.value = await apiClient.getEvaluation(submissionId);
+    teacherComment.value = evaluation.value.teacherComment ?? '';
+  });
+}
+
+async function saveReview() {
+  if (!selectedSubmissionId.value) {
+    return;
+  }
+  await withBusy(async () => {
+    evaluation.value = await apiClient.reviewSubmission(selectedSubmissionId.value, {
+      teacherComment: teacherComment.value,
+    });
+  });
+}
+
+async function publishReview() {
+  if (!selectedSubmissionId.value) {
+    return;
+  }
+  await withBusy(async () => {
+    evaluation.value = await apiClient.publishSubmission(selectedSubmissionId.value);
+    await refreshDashboard();
+  });
+}
+
+async function createExport(reportType: 'student' | 'class' | 'course', format: 'xlsx' | 'pdf') {
+  await withBusy(async () => {
+    await apiClient.createReportExport(reportType, format);
+    reportExports.value = await apiClient.listReportExports();
+    jobs.value = await apiClient.listJobs();
+  });
+}
+
+async function withBusy(action: () => Promise<void>) {
+  isBusy.value = true;
+  try {
+    await action();
+  } catch (error) {
+    viewError.value = formatError(error);
+  } finally {
+    isBusy.value = false;
+  }
+}
+
+function formatError(error: unknown) {
+  if (error instanceof ApiClientError) {
+    return `${error.status} ${error.message}`;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function roleLabel(role: UserRole) {
+  return {
+    admin: '管理员',
+    teacher: '教师',
+    student: '学生',
+  }[role];
+}
+
+function statusLabel(status: string) {
+  const map: Record<string, string> = {
+    draft: '草稿',
+    parsing: '解析中',
+    evaluating: '评价中',
+    teacher_review: '待复核',
+    published: '已发布',
+    queued: '排队中',
+    running: '运行中',
+    succeeded: '成功',
+    failed: '失败',
+    cancelled: '已取消',
+  };
+  return map[status] ?? status;
+}
+
+function jobTypeLabel(jobType: string) {
+  const map: Record<string, string> = {
+    parse_artifact: '成果解析',
+    evaluate_submission: '智能评价',
+    export_report: '报表导出',
+  };
+  return map[jobType] ?? jobType;
+}
+
+function severityLabel(severity: string) {
+  const map: Record<string, string> = {
+    info: '提示',
+    warning: '警告',
+    critical: '严重',
+  };
+  return map[severity] ?? severity;
+}
+
+function findingTypeLabel(type: string) {
+  const map: Record<string, string> = {
+    requirement: '要求覆盖',
+    step: '步骤完整性',
+    logic: '逻辑风险',
+    security: '安全风险',
+    document: '文档规范',
+    code: '代码质量',
+  };
+  return map[type] ?? type;
+}
+
+function scoreText(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === '') {
+    return '--';
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed.toFixed(1) : String(value);
+}
+
+function shortId(value: string) {
+  return value.slice(0, 8);
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) {
+    return '--';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
 </script>

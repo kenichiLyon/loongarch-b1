@@ -90,6 +90,7 @@ cp .env.example .env
 ```dotenv
 API_PORT=3000
 WEB_PORT=5173
+VITE_API_BASE_URL=http://localhost:3000
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/loongarch_b1
 DATABASE_HEALTH_TIMEOUT_MS=3000
 DATABASE_POOL_MAX=10
@@ -127,6 +128,8 @@ pnpm dev
 - 后端 API：`http://localhost:3000/health`
 - 数据库健康检查：`http://localhost:3000/health/database`
 - 前端 Web：`http://localhost:5173`
+
+前端通过 `VITE_API_BASE_URL` 连接后端 API；跨机器调试或在 LoongArch 目标机联调时，将该值改为 API 服务的实际地址后重新启动/构建 Web。
 
 ### 构建与测试
 
@@ -174,6 +177,12 @@ JOB_RUN_ONCE=true pnpm worker:export
 - Vue 3 前端 TypeScript 检查和 Vite 构建通过。
 - 核心评价指标权重校验测试通过。
 
+### Web 工作台
+
+前端已提供第一版 PC Web 工作台，覆盖登录、提交复核队列、AI/规则初评查看、教师总评保存、结果发布、异步任务状态、审计日志、统计概览和 Excel/PDF 导出任务创建。页面会在未连接 API、未登录或暂无数据时显示空态/错误态，便于 amd64 Windows/Linux 开发机与 LoongArch + 银河麒麟目标机分别联调。
+
+当前教师总评保存入口只提交 `teacherComment`，逐项改分表单、学生端已发布反馈页、导出文件下载入口和课程/班级筛选会在后续页面阶段继续补齐。
+
 ## 6. 基础 API
 
 当前已提供第一批管理端基础接口：
@@ -198,6 +207,8 @@ JOB_RUN_ONCE=true pnpm worker:export
 - `GET /reports/statistics`：管理员/教师按课程、班级、实训任务或学生筛选已发布评价统计
 - `POST /reports/exports`：管理员/教师创建 `xlsx`/`pdf` 异步报表导出任务
 - `GET /reports/exports`、`GET /reports/exports/:exportId`：查看报表导出状态、对象存储 key 和文件 hash
+
+Web 工作台默认读取 `GET /submissions`、`GET /jobs`、`GET /audit-logs`、`GET /reports/statistics`、`GET /reports/exports`，并在选中提交后读取 `GET /evaluations/submissions/:submissionId`。
 
 除健康检查和登录/初始化接口外，基础管理接口均需要 Bearer Token；管理员可创建用户，管理员/教师可维护课程、班级、评价模板和实训任务。
 
@@ -308,6 +319,7 @@ pnpm risk:loongarch
 - pnpm monorepo 工程骨架。
 - NestJS 后端健康检查接口。
 - Vue 3 首屏工作台。
+- PC Web 工作台第一版：登录、任务状态、教师复核、统计导出和审计查看。
 - 核心评价领域契约和权重校验测试。
 - 依赖精确版本、pnpm lockfile 和 CI 冻结安装。
 - 核心 PostgreSQL 数据模型和初始迁移脚本。
@@ -330,5 +342,5 @@ pnpm risk:loongarch
 下一步：
 
 1. 扩展 Word/PDF/OCR/代码包真实解析器与解析回归样例。
-2. 补齐前端登录、任务状态、教师复核、学生反馈和 AI/规则初评查看页面。
+2. 补齐前端逐项改分、学生反馈、课程/班级筛选、上传入口和导出文件下载页面。
 3. 增强报表图表、PDF 中文字体嵌入和导出文件下载/权限控制。
