@@ -65,6 +65,12 @@ export interface MetricScore {
   comments?: unknown;
 }
 
+export interface ReviewMetricScoreInput {
+  rubricMetricId: string;
+  teacherScore: number;
+  comment?: string;
+}
+
 export interface VerificationFinding {
   id?: string;
   findingType: string;
