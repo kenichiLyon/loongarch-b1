@@ -18,6 +18,14 @@ export interface StoredObject {
   sizeBytes: number;
 }
 
+export interface StoreReportExportInput {
+  exportId: string;
+  reportType: string;
+  format: string;
+  buffer: Buffer;
+  now?: Date;
+}
+
 @Injectable()
 export class LocalObjectStoreService {
   async storeArtifact(input: StoreArtifactInput): Promise<StoredObject> {
@@ -45,6 +53,21 @@ export class LocalObjectStoreService {
   async readObject(storageKey: string) {
     return readFile(resolveStoragePath(storageKey));
   }
+
+  async storeReportExport(input: StoreReportExportInput): Promise<StoredObject> {
+    const sha256 = createHash('sha256').update(input.buffer).digest('hex');
+    const storageKey = buildReportExportStorageKey({ ...input, sha256 });
+    const target = resolveStoragePath(storageKey);
+
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, input.buffer);
+
+    return {
+      storageKey: normalizeStorageKey(storageKey),
+      sha256,
+      sizeBytes: input.buffer.byteLength,
+    };
+  }
 }
 
 export function getStorageRoot() {
@@ -57,6 +80,14 @@ export function buildArtifactStorageKey(input: StoreArtifactInput & { sha256: st
   const month = String(now.getUTCMonth() + 1).padStart(2, '0');
   const safeName = sanitizeFileName(input.originalName);
   return normalizeStorageKey(path.join('artifacts', year, month, input.submissionId, `${input.sha256.slice(0, 16)}-${safeName}`));
+}
+
+export function buildReportExportStorageKey(input: StoreReportExportInput & { sha256: string }) {
+  const now = input.now ?? new Date();
+  const year = String(now.getUTCFullYear());
+  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const fileName = `${sanitizeFileName(input.reportType)}-${input.exportId}-${input.sha256.slice(0, 16)}.${sanitizeFileName(input.format)}`;
+  return normalizeStorageKey(path.join('report-exports', year, month, input.exportId, fileName));
 }
 
 export function sanitizeFileName(name: string) {

@@ -15,6 +15,7 @@
     "db:migrate": "pnpm --filter @loongarch-b1/api db:migrate",
     "worker:parse": "pnpm --filter @loongarch-b1/api worker:parse",
     "worker:evaluate": "pnpm --filter @loongarch-b1/api worker:evaluate",
+    "worker:export": "pnpm --filter @loongarch-b1/api worker:export",
     "risk:loongarch": "node scripts/loongarch-dependency-risk.mjs --write docs/LOONGARCH_DEPENDENCY_RISK.md"
   },
   "engines": {
