@@ -12,7 +12,8 @@
     "test": "tsx --test src/**/*.test.ts",
     "db:migrate": "tsx src/database/migrate.ts",
     "worker:parse": "tsx src/workers/parse-artifacts.ts",
-    "worker:evaluate": "tsx src/workers/evaluate-submissions.ts"
+    "worker:evaluate": "tsx src/workers/evaluate-submissions.ts",
+    "worker:export": "tsx src/workers/export-reports.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.1.19",

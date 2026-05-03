@@ -62,4 +62,10 @@
 - 依赖：仅使用 Node.js 22 内置 `fetch`、`AbortController`、`crypto` 与 PostgreSQL JSONB，未新增第三方运行时依赖。
 - 影响：目标环境需验证 Node.js 22 内置 fetch 可用；本地/局域网模型服务需提供 `/chat/completions` 兼容接口。若未配置 `LLM_BASE_URL`/`LLM_MODEL`，系统会降级生成教师复核草稿，不阻塞上传和解析主流程。
 
+### 2026-05-03：报表统计与导出 worker
+
+- 变更：新增 `GET /reports/statistics`、报表导出 API、`pnpm worker:export`、最小 `.xlsx` OpenXML 生成和纯文本 PDF 生成，并将导出文件写入本地对象存储。
+- 依赖：未新增第三方依赖；Excel/PDF 基础生成仅使用 Node.js `Buffer`、文件系统和 PostgreSQL 查询。
+- 影响：LoongArch 目标环境需验证大批量已发布评价统计查询耗时、`STORAGE_ROOT/report-exports` 写入权限和磁盘容量。当前 PDF 为纯文本基础实现，中文字体嵌入、图表渲染和复杂版式需在银河麒麟目标环境补充字体路径与授权验证。
+
 后续每次发现平台差异时，在本文件追加：验证日期、目标环境版本、依赖版本、测试命令、结果和替代方案。

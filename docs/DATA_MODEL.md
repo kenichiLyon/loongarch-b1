@@ -53,6 +53,7 @@
 - 一个提交最多有一个当前评价结果；评价结果包含多条指标得分和核查发现，规则分与 AI 草稿可被重新生成但最终教师分不能被后台覆盖。
 - 教师复核会写入 `metric_scores.teacher_score`、`metric_scores.final_score`、`evaluation_results.final_score`、`confirmed_by` 和 `confirmed_at`；发布时写入 `published_at` 并把提交状态置为 `published`。
 - 报表导出记录操作者、筛选条件、生成状态和对象存储 key。
+- 报表导出只读取 `published` 评价结果；`report_exports.filter_json` 保存课程、班级、实训任务或学生筛选条件，`storage_key` 和 `file_sha256` 指向导出文件。
 - 后台任务通过 `jobs.run_after`、`locked_at`、`locked_by`、`attempts` 和 `max_attempts` 支持延迟重试、多 worker 并发领取和崩溃恢复。
 - 审计日志通过 `action`、`entity_type`、`entity_id` 和 `detail_json` 关联上传、解析、LLM、改分、发布和导出等关键操作。
 
@@ -62,6 +63,7 @@
 - 学生查看自己的提交状态、解析结果摘要和已发布评价。
 - 教师打开单个提交，查看成果文件、解析证据、AI 初评、核查发现并复核。
 - 管理端按课程生成班级分布、指标均值、常见问题 Top N 和导出文件。
+- 教师/管理员创建 Excel/PDF 异步导出任务，并通过 `report_exports.status`、`storage_key`、`file_sha256` 查询生成结果。
 - 审计端追踪某次教师改分、LLM 调用或报表导出。
 - 教师/管理员按任务类型、任务状态、提交 ID 或成果 ID 排查异步任务。
 - 教师/管理员按动作、实体或操作者筛选审计日志，定位上传与解析链路问题。

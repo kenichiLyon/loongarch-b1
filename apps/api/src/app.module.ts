@@ -7,6 +7,7 @@ import { EvaluationModule } from './evaluation/evaluation.module';
 import { FoundationModule } from './foundation/foundation.module';
 import { HealthController } from './health.controller';
 import { JobsModule } from './jobs/jobs.module';
+import { ReportsModule } from './reports/reports.module';
 import { SubmissionsModule } from './submissions/submissions.module';
 import { WorkersModule } from './workers/workers.module';
 
@@ -22,6 +23,7 @@ import { WorkersModule } from './workers/workers.module';
     EvaluationModule,
     FoundationModule,
     JobsModule,
+    ReportsModule,
     SubmissionsModule,
     WorkersModule,
   ],

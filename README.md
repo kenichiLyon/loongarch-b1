@@ -158,6 +158,16 @@ JOB_RUN_ONCE=true pnpm worker:evaluate
 
 `LLM_PROVIDER=cloud|local` 用于标记云端或本地/局域网模型服务；本地服务可不配置 `LLM_API_KEY`，但必须提供 OpenAI-compatible `/chat/completions` 接口。
 
+### 报表导出 Worker
+
+报表导出由 `export_report` 任务异步生成，API 只负责创建 `report_exports` 记录和入队。导出 worker 会读取已发布评价，生成课程/班级/学生统计，写入 `STORAGE_ROOT/report-exports/...`：
+
+```bash
+JOB_RUN_ONCE=true pnpm worker:export
+```
+
+当前导出基础能力不引入 native 依赖：Excel 使用最小 OpenXML `.xlsx`，PDF 使用内置纯文本 PDF 生成器。PDF 中文字体嵌入、图表渲染和复杂版式仍作为目标环境验证项后续增强。
+
 当前脚手架验证目标：
 
 - NestJS 后端 TypeScript 编译通过。
@@ -185,6 +195,9 @@ JOB_RUN_ONCE=true pnpm worker:evaluate
 - `PATCH /evaluations/submissions/:submissionId/review`：管理员/教师逐项填写教师分、评语并确认最终分
 - `POST /evaluations/submissions/:submissionId/publish`：管理员/教师发布已复核评价结果
 - `GET /evaluations/submissions/:submissionId/published`：学生查看自己已发布的反馈，管理员/教师也可查看
+- `GET /reports/statistics`：管理员/教师按课程、班级、实训任务或学生筛选已发布评价统计
+- `POST /reports/exports`：管理员/教师创建 `xlsx`/`pdf` 异步报表导出任务
+- `GET /reports/exports`、`GET /reports/exports/:exportId`：查看报表导出状态、对象存储 key 和文件 hash
 
 除健康检查和登录/初始化接口外，基础管理接口均需要 Bearer Token；管理员可创建用户，管理员/教师可维护课程、班级、评价模板和实训任务。
 
@@ -312,9 +325,10 @@ pnpm risk:loongarch
 - OpenAI-compatible LLM Gateway、脱敏证据摘要、JSON 初评校验、评价 worker 和 AI 草稿落库。
 - 确定性规则核查基础能力：需求覆盖、步骤完整性、文档证据质量、异常/Prompt Injection 风险识别和指标 `rule_score` 落库。
 - 教师复核 API：逐项教师分、总评语、最终分确认、发布和学生已发布反馈查看。
+- 报表统计与导出基础能力：已发布成绩统计、常见问题统计、`export_report` worker、最小 `.xlsx`/`.pdf` 生成和对象存储落盘。
 
 下一步：
 
 1. 扩展 Word/PDF/OCR/代码包真实解析器与解析回归样例。
 2. 补齐前端登录、任务状态、教师复核、学生反馈和 AI/规则初评查看页面。
-3. 推进报表导出 API、统计查询和 Excel/PDF 异步生成。
+3. 增强报表图表、PDF 中文字体嵌入和导出文件下载/权限控制。

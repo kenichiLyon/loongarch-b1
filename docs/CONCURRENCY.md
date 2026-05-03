@@ -8,6 +8,7 @@
 - 文件保存到 `STORAGE_ROOT` 后，只在数据库中记录 `storage_key`、hash、大小和状态。
 - 上传完成后创建 `jobs` 表任务，解析由独立 worker 消费，API 请求只负责入队。
 - 全部成果解析完成后自动创建 `evaluate_submission` 任务，评价 worker 独立执行确定性规则核查、构建脱敏摘要并调用 LLM Gateway，API 请求不等待模型响应。
+- 报表导出只创建 `export_report` 任务，导出 worker 异步读取已发布评价并把 Excel/PDF 文件写入对象存储，API 请求不等待文件生成。
 - 任务领取使用 PostgreSQL `FOR UPDATE SKIP LOCKED`，多个 worker 并发运行时不会领取同一条任务。
 - worker 每次按 `JOB_BATCH_SIZE` 批量领取任务，失败后按 `JOB_RETRY_DELAY_SECONDS` 延迟重试，超过 `max_attempts` 后标记失败。
 - `JOB_STALE_AFTER_SECONDS` 用于释放崩溃 worker 遗留的 `running` 任务，避免永久卡死。
@@ -15,6 +16,7 @@
 - 上传和解析结果写入审计日志；写入发生在同一数据库事务内，保证排障时可以关联业务状态和操作记录。
 - 管理员/教师可通过 `GET /jobs` 查询异步任务，通过 `GET /audit-logs` 查询处理留痕；接口单次最多返回 200 条，避免状态页拖垮数据库。
 - 教师复核和发布在事务内锁定 `evaluation_results` 与对应 `metric_scores` 行，避免多个教师同时改分时出现覆盖或总分不一致。
+- 报表导出结果写入 `report_exports`，生成成功/失败和任务状态可通过 `GET /jobs`、`GET /reports/exports` 追踪。
 
 ## 数据库并发要点
 
@@ -27,6 +29,7 @@
 - `idx_llm_call_logs_submission_created`：优化单个提交的 LLM 调用追踪。
 - `idx_evaluation_results_status_updated`：优化教师端待复核列表。
 - `idx_verification_findings_type_severity`：优化常见问题统计。
+- `idx_report_exports_status`：优化导出任务状态页查询。
 - API 连接池由 `DATABASE_POOL_MAX` 控制；部署时应按 CPU、PostgreSQL max_connections 和 worker 数量共同设置。
 - 教师复核属于低频写操作，但仍通过行级锁保证同一提交的改分和发布串行化；不同提交可并行复核。
 
@@ -34,6 +37,7 @@
 
 - API 服务：多进程或多实例部署，处理登录、基础数据和上传入队。
 - Parse worker：独立 systemd 服务，可按机器 CPU/IO 能力启动多个实例。
+- Export worker：独立 systemd 服务，可按报表并发需求启动少量实例，避免大批量导出影响 API 和评价 worker。
 - PostgreSQL：作为任务协调点，首版不额外引入 Redis/RabbitMQ，减少 LoongArch 部署组件。
 - 对象存储：首版本地磁盘，后续可在 `ObjectStore` 抽象下替换为 MinIO/S3。
 
@@ -63,7 +67,20 @@ JOB_RUN_ONCE=true JOB_WORKER_ID=evaluation-worker-1 pnpm worker:evaluate
 JOB_WORKER_ID=evaluation-worker-1 JOB_BATCH_SIZE=3 pnpm worker:evaluate
 ```
 
+执行一次报表导出批处理：
+
+```bash
+JOB_RUN_ONCE=true JOB_WORKER_ID=report-export-worker-1 pnpm worker:export
+```
+
+持续消费报表导出任务：
+
+```bash
+JOB_WORKER_ID=report-export-worker-1 JOB_BATCH_SIZE=2 pnpm worker:export
+```
+
 确定性规则核查是 CPU/内存轻量任务，可随评价 worker 批量执行；LLM 调用属于外部 IO，应按模型服务吞吐能力独立设置评价 worker 数量。本地模型部署时建议先小批量验证显存/内存占用，再逐步提高 `JOB_BATCH_SIZE`。
+报表导出主要消耗数据库读 IO 和对象存储写 IO，建议独立设置较小 `JOB_BATCH_SIZE`，避免与批量评价争抢 PostgreSQL 连接池。
 
 ## 后续增强
 
