@@ -6,6 +6,7 @@ import type {
   Job,
   ReportExport,
   ReportStatistics,
+  ReviewMetricScoreInput,
   Submission,
 } from '../types/api';
 
@@ -96,7 +97,7 @@ export class ApiClient {
     return this.request<Evaluation>(`/evaluations/submissions/${encodeURIComponent(submissionId)}`);
   }
 
-  async reviewSubmission(submissionId: string, payload: { teacherComment: string }) {
+  async reviewSubmission(submissionId: string, payload: { teacherComment: string; metricScores?: ReviewMetricScoreInput[] }) {
     return this.request<Evaluation>(`/evaluations/submissions/${encodeURIComponent(submissionId)}/review`, {
       method: 'PATCH',
       body: payload,
@@ -126,6 +127,14 @@ export class ApiClient {
         filters: {},
       },
     });
+  }
+
+  buildReportExportDownloadUrl(exportId: string) {
+    return `${this.baseUrl}/reports/exports/${encodeURIComponent(exportId)}/download`;
+  }
+
+  getAuthorizationHeader() {
+    return this.accessToken ? `Bearer ${this.accessToken}` : '';
   }
 
   async loadDashboardSnapshot(selectedSubmissionId = ''): Promise<DashboardSnapshot> {

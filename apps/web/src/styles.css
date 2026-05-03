@@ -218,6 +218,17 @@ h2 {
   box-shadow: none;
 }
 
+.inline-button {
+  justify-self: start;
+  margin-top: 8px;
+  padding: 0.52rem 0.78rem;
+  color: var(--green);
+  border: 1px solid rgba(35, 59, 51, 0.18);
+  background: rgba(255, 252, 241, 0.78);
+  box-shadow: none;
+  font-size: 0.86rem;
+}
+
 .status-strip {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -402,6 +413,19 @@ h2 {
 .metric-grid strong {
   font-size: 1.6rem;
   letter-spacing: -0.05em;
+}
+
+.metric-input {
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.metric-input input {
+  border-radius: 14px;
+  padding: 0.62rem 0.72rem;
+  font-size: 0.9rem;
 }
 
 .review-box {

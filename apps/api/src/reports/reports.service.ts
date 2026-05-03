@@ -1,9 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { PoolClient, QueryResultRow } from 'pg';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { AuditService } from '../audit/audit.service';
 import { DatabaseService } from '../database/database.service';
 import { clampQueryLimit } from '../database/sql-query.helpers';
+import { UserRole } from '../domain/core';
+import { LocalObjectStoreService } from '../storage/local-object-store.service';
 import type { CreateReportExportDto, ListReportExportsQueryDto, ReportExportStatus, ReportFilterDto } from './reports.dto';
 import type { ReportFindingStatistic, ReportMetricStatistic, ReportStatisticSummary, ReportStatistics } from './report-renderer';
 
@@ -48,6 +50,7 @@ export class ReportsService {
   constructor(
     private readonly database: DatabaseService,
     private readonly auditService: AuditService,
+    private readonly objectStore: LocalObjectStoreService,
   ) {}
 
   async getStatistics(filters: ReportFilterDto = {}): Promise<ReportStatistics> {
@@ -181,6 +184,38 @@ export class ReportsService {
     return row;
   }
 
+  async downloadExport(exportId: string, user: AuthenticatedUser) {
+    const reportExport = await this.getExport(exportId);
+    if (reportExport.status !== 'succeeded' || !reportExport.storageKey) {
+      throw new BadRequestException('Report export is not ready for download');
+    }
+    if (user.role !== UserRole.Admin && reportExport.requestedBy !== user.id) {
+      throw new ForbiddenException('Teachers can only download report exports they requested');
+    }
+
+    const buffer = await this.objectStore.readObject(reportExport.storageKey);
+    await this.auditService.record({
+      actorId: user.id,
+      action: 'report_export.downloaded',
+      entityType: 'report_export',
+      entityId: reportExport.id,
+      detail: {
+        reportType: reportExport.reportType,
+        format: reportExport.format,
+        storageKey: reportExport.storageKey,
+        fileSha256: reportExport.fileSha256,
+        sizeBytes: buffer.byteLength,
+      },
+    });
+
+    return {
+      buffer,
+      fileName: buildReportDownloadFileName(reportExport),
+      mimeType: getReportExportMimeType(reportExport.format),
+      sha256: reportExport.fileSha256,
+    };
+  }
+
   async loadExportForWorker(client: PoolClient, exportId: string) {
     const result = await client.query<ReportExportRow>(
       `SELECT ${selectReportExportColumns()}
@@ -274,4 +309,18 @@ function selectReportExportColumns() {
           filter_json AS "filterJson", status, storage_key AS "storageKey",
           file_sha256 AS "fileSha256", error_message AS "errorMessage",
           created_at AS "createdAt", completed_at AS "completedAt"`;
+}
+
+function buildReportDownloadFileName(reportExport: Pick<ReportExportRow, 'reportType' | 'format' | 'id'>) {
+  return `${reportExport.reportType}-report-${reportExport.id}.${reportExport.format}`;
+}
+
+function getReportExportMimeType(format: string) {
+  if (format === 'xlsx') {
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
+  if (format === 'pdf') {
+    return 'application/pdf';
+  }
+  return 'application/octet-stream';
 }

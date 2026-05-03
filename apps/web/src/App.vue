@@ -84,6 +84,19 @@
                   <span>{{ metric.metricName ?? shortId(metric.rubricMetricId) }}</span>
                   <strong>{{ scoreText(metric.finalScore ?? metric.teacherScore ?? metric.aiScore ?? metric.ruleScore) }}</strong>
                   <small>规则 {{ scoreText(metric.ruleScore) }} · AI {{ scoreText(metric.aiScore) }}</small>
+                  <label class="metric-input">
+                    教师分
+                    <input
+                      v-model="metricReviewDraft[metric.rubricMetricId].teacherScore"
+                      inputmode="decimal"
+                      placeholder="0-100"
+                      type="number"
+                    />
+                  </label>
+                  <label class="metric-input">
+                    指标评语
+                    <input v-model="metricReviewDraft[metric.rubricMetricId].comment" placeholder="可选，说明调整依据" />
+                  </label>
                 </article>
               </div>
               <div class="review-box">
@@ -148,6 +161,14 @@
             <span>{{ item.reportType }} · {{ item.format }}</span>
             <strong>{{ statusLabel(item.status) }}</strong>
             <small>{{ item.storageKey ?? item.errorMessage ?? formatDate(item.createdAt) }}</small>
+            <button
+              v-if="item.status === 'succeeded'"
+              class="inline-button"
+              type="button"
+              @click="downloadExport(item)"
+            >
+              下载文件
+            </button>
           </li>
         </ul>
         <div v-else class="empty-state">暂无导出记录。导出任务会异步生成并写入对象存储。</div>
@@ -190,7 +211,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { ApiClient, ApiClientError, getDefaultApiBaseUrl } from './services/api-client';
-import type { AuditLog, Evaluation, Job, ReportExport, ReportStatistics, Submission, UserRole } from './types/api';
+import type { AuditLog, Evaluation, Job, MetricScore, ReportExport, ReportStatistics, Submission, UserRole } from './types/api';
 
 const apiClient = new ApiClient();
 const apiBaseUrl = getDefaultApiBaseUrl();
@@ -210,6 +231,7 @@ const reportExports = ref<ReportExport[]>([]);
 const evaluation = ref<Evaluation | null>(null);
 const selectedSubmissionId = ref('');
 const teacherComment = ref('');
+const metricReviewDraft = reactive<Record<string, { teacherScore: string; comment: string }>>({});
 
 const runningJobCount = computed(() => jobs.value.filter((job) => job.status === 'running').length);
 const averageScorePercent = computed(() => {
@@ -265,6 +287,7 @@ async function refreshDashboard() {
     evaluation.value = snapshot.evaluation;
     selectedSubmissionId.value = snapshot.evaluation?.submissionId ?? snapshot.submissions[0]?.id ?? '';
     teacherComment.value = snapshot.evaluation?.teacherComment ?? '';
+    resetMetricReviewDraft(snapshot.evaluation?.metricScores ?? []);
   });
 }
 
@@ -273,6 +296,7 @@ async function selectSubmission(submissionId: string) {
     selectedSubmissionId.value = submissionId;
     evaluation.value = await apiClient.getEvaluation(submissionId);
     teacherComment.value = evaluation.value.teacherComment ?? '';
+    resetMetricReviewDraft(evaluation.value.metricScores);
   });
 }
 
@@ -283,7 +307,9 @@ async function saveReview() {
   await withBusy(async () => {
     evaluation.value = await apiClient.reviewSubmission(selectedSubmissionId.value, {
       teacherComment: teacherComment.value,
+      metricScores: buildMetricReviewPayload(),
     });
+    resetMetricReviewDraft(evaluation.value.metricScores);
   });
 }
 
@@ -303,6 +329,61 @@ async function createExport(reportType: 'student' | 'class' | 'course', format: 
     reportExports.value = await apiClient.listReportExports();
     jobs.value = await apiClient.listJobs();
   });
+}
+
+async function downloadExport(item: ReportExport) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const token = apiClient.getAuthorizationHeader();
+  if (!token) {
+    viewError.value = '请先登录后再下载报表。';
+    return;
+  }
+
+  const url = apiClient.buildReportExportDownloadUrl(item.id);
+  const response = await fetch(url, {
+    headers: {
+      Authorization: token,
+    },
+  });
+  if (!response.ok) {
+    viewError.value = `${response.status} ${response.statusText}`;
+    return;
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = `${item.reportType}-report-${shortId(item.id)}.${item.format}`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+function resetMetricReviewDraft(metricScores: MetricScore[]) {
+  for (const key of Object.keys(metricReviewDraft)) {
+    delete metricReviewDraft[key];
+  }
+  for (const metric of metricScores) {
+    const score = metric.teacherScore ?? metric.finalScore ?? metric.aiScore ?? metric.ruleScore ?? '';
+    metricReviewDraft[metric.rubricMetricId] = {
+      teacherScore: score === null ? '' : String(score),
+      comment: '',
+    };
+  }
+}
+
+function buildMetricReviewPayload() {
+  return Object.entries(metricReviewDraft)
+    .map(([rubricMetricId, draft]) => ({
+      rubricMetricId,
+      teacherScore: Number(draft.teacherScore),
+      comment: draft.comment.trim() || undefined,
+    }))
+    .filter((item) => Number.isFinite(item.teacherScore));
 }
 
 async function withBusy(action: () => Promise<void>) {

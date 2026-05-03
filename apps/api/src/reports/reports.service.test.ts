@@ -5,6 +5,7 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { AuditService } from '../audit/audit.service';
 import type { DatabaseService } from '../database/database.service';
 import { UserRole } from '../domain/core';
+import type { LocalObjectStoreService } from '../storage/local-object-store.service';
 import { buildPublishedEvaluationWhere, ReportsService } from './reports.service';
 
 const user: AuthenticatedUser = {
@@ -59,7 +60,19 @@ test('queues report exports and audit events in one transaction', async () => {
   assert.equal(capturedQueries.some((query) => query.params.includes('report_export.queued')), true);
 });
 
-function buildService(capturedQueries: Array<{ sql: string; params: readonly unknown[] }> = []) {
+test('downloads succeeded report exports requested by the teacher', async () => {
+  const capturedQueries: Array<{ sql: string; params: readonly unknown[] }> = [];
+  const service = buildService(capturedQueries, Buffer.from('report-content'));
+
+  const result = await service.downloadExport('00000000-0000-0000-0000-000000000020', user);
+
+  assert.equal(result.mimeType, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  assert.match(result.fileName, /^course-report-.*\.xlsx$/);
+  assert.equal(result.buffer.toString('utf8'), 'report-content');
+  assert.equal(capturedQueries.some((query) => query.params.includes('report_export.downloaded')), true);
+});
+
+function buildService(capturedQueries: Array<{ sql: string; params: readonly unknown[] }> = [], objectBuffer = Buffer.from('')) {
   const client = {
     query: async (sql: string, params: readonly unknown[] = []) => handleQuery(sql, params, capturedQueries),
   } as unknown as PoolClient;
@@ -67,7 +80,10 @@ function buildService(capturedQueries: Array<{ sql: string; params: readonly unk
     query: async (sql: string, params: readonly unknown[] = []) => handleQuery(sql, params, capturedQueries),
     withTransaction: async <T>(handler: (poolClient: PoolClient) => Promise<T>) => handler(client),
   } as unknown as DatabaseService;
-  return new ReportsService(database, new AuditService(database));
+  const objectStore = {
+    readObject: async () => objectBuffer,
+  } as unknown as LocalObjectStoreService;
+  return new ReportsService(database, new AuditService(database), objectStore);
 }
 
 async function handleQuery(sql: string, params: readonly unknown[], capturedQueries: Array<{ sql: string; params: readonly unknown[] }>) {
@@ -111,6 +127,26 @@ async function handleQuery(sql: string, params: readonly unknown[], capturedQuer
           errorMessage: null,
           createdAt: '2026-05-03T00:00:00.000Z',
           completedAt: null,
+        },
+      ],
+    };
+  }
+
+  if (sql.includes('FROM report_exports') && sql.includes('WHERE id = $1')) {
+    return {
+      rows: [
+        {
+          id: params[0],
+          reportType: 'course',
+          format: 'xlsx',
+          requestedBy: user.id,
+          filterJson: {},
+          status: 'succeeded',
+          storageKey: 'report-exports/2026/05/export.xlsx',
+          fileSha256: 'sha256-value',
+          errorMessage: null,
+          createdAt: '2026-05-03T00:00:00.000Z',
+          completedAt: '2026-05-03T00:00:01.000Z',
         },
       ],
     };

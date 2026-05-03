@@ -181,7 +181,7 @@ JOB_RUN_ONCE=true pnpm worker:export
 
 前端已提供第一版 PC Web 工作台，覆盖登录、提交复核队列、AI/规则初评查看、教师总评保存、结果发布、异步任务状态、审计日志、统计概览和 Excel/PDF 导出任务创建。页面会在未连接 API、未登录或暂无数据时显示空态/错误态，便于 amd64 Windows/Linux 开发机与 LoongArch + 银河麒麟目标机分别联调。
 
-当前教师总评保存入口只提交 `teacherComment`，逐项改分表单、学生端已发布反馈页、导出文件下载入口和课程/班级筛选会在后续页面阶段继续补齐。
+当前教师复核入口已支持逐项教师分、指标评语和总评提交；学生端已发布反馈页、课程/班级筛选和上传入口会在后续页面阶段继续补齐。
 
 ## 6. 基础 API
 
@@ -207,6 +207,7 @@ JOB_RUN_ONCE=true pnpm worker:export
 - `GET /reports/statistics`：管理员/教师按课程、班级、实训任务或学生筛选已发布评价统计
 - `POST /reports/exports`：管理员/教师创建 `xlsx`/`pdf` 异步报表导出任务
 - `GET /reports/exports`、`GET /reports/exports/:exportId`：查看报表导出状态、对象存储 key 和文件 hash
+- `GET /reports/exports/:exportId/download`：管理员或导出创建教师下载已成功生成的报表文件
 
 Web 工作台默认读取 `GET /submissions`、`GET /jobs`、`GET /audit-logs`、`GET /reports/statistics`、`GET /reports/exports`，并在选中提交后读取 `GET /evaluations/submissions/:submissionId`。
 
@@ -338,9 +339,10 @@ pnpm risk:loongarch
 - 确定性规则核查基础能力：需求覆盖、步骤完整性、文档证据质量、异常/Prompt Injection 风险识别和指标 `rule_score` 落库。
 - 教师复核 API：逐项教师分、总评语、最终分确认、发布和学生已发布反馈查看。
 - 报表统计与导出基础能力：已发布成绩统计、常见问题统计、`export_report` worker、最小 `.xlsx`/`.pdf` 生成和对象存储落盘。
+- 报表下载基础能力：后端提供 RBAC 保护的导出下载接口，前端可下载已成功生成的 Excel/PDF。
 
 下一步：
 
 1. 扩展 Word/PDF/OCR/代码包真实解析器与解析回归样例。
-2. 补齐前端逐项改分、学生反馈、课程/班级筛选、上传入口和导出文件下载页面。
-3. 增强报表图表、PDF 中文字体嵌入和导出文件下载/权限控制。
+2. 补齐前端学生反馈、课程/班级筛选、上传入口和基础数据维护页面。
+3. 增强报表图表、PDF 中文字体嵌入、导出下载体验和权限测试。
