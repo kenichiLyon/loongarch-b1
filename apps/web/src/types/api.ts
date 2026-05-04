@@ -25,6 +25,22 @@ export interface Submission {
   updatedAt: string;
 }
 
+export type ArtifactKind = 'word' | 'pdf' | 'image' | 'code_archive' | 'git_link' | 'other';
+
+export interface UploadedArtifact {
+  id: string;
+  submissionId: string;
+  kind: ArtifactKind | string;
+  originalName: string;
+  mimeType: string | null;
+  sizeBytes: string | number;
+  sha256: string;
+  storageKey: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Job {
   id: string;
   jobType: 'parse_artifact' | 'evaluate_submission' | 'export_report' | string;
