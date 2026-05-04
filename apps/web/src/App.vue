@@ -47,6 +47,35 @@
       <strong>操作完成：</strong>{{ viewMessage }}
     </section>
 
+    <section class="filter-dock" aria-label="筛选器">
+      <label>
+        课程
+        <select v-model="selectedCourseId" @change="handleCourseSelection">
+          <option value="">全部课程</option>
+          <option v-for="course in courses" :key="course.id" :value="course.id">{{ course.name }} · {{ course.code }}</option>
+        </select>
+      </label>
+      <label>
+        班级
+        <select v-model="selectedClassId">
+          <option value="">全部班级</option>
+          <option v-for="classGroup in classes" :key="classGroup.id" :value="classGroup.id">
+            {{ classGroup.name }}{{ classGroup.grade ? ` · ${classGroup.grade}` : '' }}
+          </option>
+        </select>
+      </label>
+      <label>
+        实训任务
+        <select v-model="uploadForm.experimentId">
+          <option value="">选择实训任务</option>
+          <option v-for="experiment in filteredExperiments" :key="experiment.id" :value="experiment.id">
+            {{ experiment.title }}
+          </option>
+        </select>
+      </label>
+      <button class="ghost-button" type="button" @click="applyReportFilters">应用报表筛选</button>
+    </section>
+
     <section class="workspace-grid" aria-label="工作台">
       <article class="work-card work-card--wide">
         <header class="card-header">
@@ -128,7 +157,7 @@
         <form class="upload-form" @submit.prevent="submitArtifactUpload">
           <label>
             实训任务 ID
-            <input v-model="uploadForm.experimentId" placeholder="experimentId，首次提交必填" />
+            <input v-model="uploadForm.experimentId" placeholder="可从顶部选择，也可手动输入 experimentId" />
           </label>
           <label v-if="sessionUser?.role !== 'student'">
             学生 ID
@@ -290,7 +319,20 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { ApiClient, ApiClientError, getDefaultApiBaseUrl } from './services/api-client';
-import type { ArtifactKind, AuditLog, Evaluation, Job, MetricScore, ReportExport, ReportStatistics, Submission, UserRole } from './types/api';
+import type {
+  ArtifactKind,
+  AuditLog,
+  ClassGroup,
+  Course,
+  Evaluation,
+  Experiment,
+  Job,
+  MetricScore,
+  ReportExport,
+  ReportStatistics,
+  Submission,
+  UserRole,
+} from './types/api';
 
 const apiClient = new ApiClient();
 const apiBaseUrl = getDefaultApiBaseUrl();
@@ -308,8 +350,13 @@ const jobs = ref<Job[]>([]);
 const auditLogs = ref<AuditLog[]>([]);
 const statistics = ref<ReportStatistics | null>(null);
 const reportExports = ref<ReportExport[]>([]);
+const courses = ref<Course[]>([]);
+const classes = ref<ClassGroup[]>([]);
+const experiments = ref<Experiment[]>([]);
 const evaluation = ref<Evaluation | null>(null);
 const selectedSubmissionId = ref('');
+const selectedCourseId = ref('');
+const selectedClassId = ref('');
 const teacherComment = ref('');
 const metricReviewDraft = reactive<Record<string, { teacherScore: string; comment: string }>>({});
 const publishedFeedback = ref<Evaluation | null>(null);
@@ -336,6 +383,12 @@ const artifactKindOptions: Array<{ value: ArtifactKind; label: string }> = [
 ];
 
 const runningJobCount = computed(() => jobs.value.filter((job) => job.status === 'running').length);
+const filteredExperiments = computed(() => {
+  if (!selectedCourseId.value) {
+    return experiments.value;
+  }
+  return experiments.value.filter((experiment) => experiment.courseId === selectedCourseId.value);
+});
 const averageScorePercent = computed(() => {
   const score = Number(statistics.value?.summary.averageScore ?? 0);
   return `${Math.max(0, Math.min(100, score))}%`;
@@ -388,11 +441,36 @@ async function refreshDashboard() {
     auditLogs.value = snapshot.auditLogs;
     statistics.value = snapshot.statistics;
     reportExports.value = snapshot.exports;
+    courses.value = snapshot.courses;
+    classes.value = snapshot.classes;
+    experiments.value = snapshot.experiments;
     evaluation.value = snapshot.evaluation;
     selectedSubmissionId.value = snapshot.evaluation?.submissionId ?? snapshot.submissions[0]?.id ?? '';
     teacherComment.value = snapshot.evaluation?.teacherComment ?? '';
     resetMetricReviewDraft(snapshot.evaluation?.metricScores ?? []);
     publishedFeedback.value = null;
+  });
+}
+
+async function handleCourseSelection() {
+  if (!selectedCourseId.value) {
+    experiments.value = await apiClient.listExperiments();
+    return;
+  }
+  experiments.value = await apiClient.listExperiments(selectedCourseId.value);
+  if (uploadForm.experimentId && !experiments.value.some((experiment) => experiment.id === uploadForm.experimentId)) {
+    uploadForm.experimentId = '';
+  }
+}
+
+async function applyReportFilters() {
+  await withBusy(async () => {
+    statistics.value = await apiClient.getReportStatistics({
+      courseId: selectedCourseId.value || undefined,
+      classId: selectedClassId.value || undefined,
+      experimentId: uploadForm.experimentId || undefined,
+    });
+    viewMessage.value = '报表筛选已应用。';
   });
 }
 
