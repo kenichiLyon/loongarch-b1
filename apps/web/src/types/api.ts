@@ -13,6 +13,38 @@ export interface AuthSession {
   expiresAt: string;
 }
 
+export interface Course {
+  id: string;
+  name: string;
+  code: string;
+  description: string | null;
+  ownerTeacherId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClassGroup {
+  id: string;
+  name: string;
+  grade: string | null;
+  major: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Experiment {
+  id: string;
+  courseId: string;
+  rubricTemplateId: string;
+  title: string;
+  requirementText: string;
+  dueAt: string | null;
+  allowedArtifactKinds: ArtifactKind[];
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Submission {
   id: string;
   experimentId: string;

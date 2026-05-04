@@ -2,7 +2,10 @@ import type {
   AuditLog,
   AuthenticatedUser,
   AuthSession,
+  ClassGroup,
+  Course,
   Evaluation,
+  Experiment,
   Job,
   ReportExport,
   ReportStatistics,
@@ -32,6 +35,9 @@ export interface DashboardSnapshot {
   statistics: ReportStatistics | null;
   exports: ReportExport[];
   evaluation: Evaluation | null;
+  courses: Course[];
+  classes: ClassGroup[];
+  experiments: Experiment[];
 }
 
 export function getDefaultApiBaseUrl() {
@@ -86,6 +92,19 @@ export class ApiClient {
     return submissions.slice(0, limit);
   }
 
+  async listCourses() {
+    return this.request<Course[]>('/courses');
+  }
+
+  async listClasses() {
+    return this.request<ClassGroup[]>('/classes');
+  }
+
+  async listExperiments(courseId = '') {
+    const query = courseId ? `?${new URLSearchParams({ courseId })}` : '';
+    return this.request<Experiment[]>(`/experiments${query}`);
+  }
+
   async createSubmission(payload: { experimentId: string; studentId?: string; attemptNo?: number }) {
     return this.request<Submission>('/submissions', {
       method: 'POST',
@@ -132,8 +151,9 @@ export class ApiClient {
     });
   }
 
-  async getReportStatistics() {
-    return this.request<ReportStatistics>('/reports/statistics');
+  async getReportStatistics(filters: { courseId?: string; classId?: string; experimentId?: string; studentId?: string } = {}) {
+    const query = buildQueryString(filters);
+    return this.request<ReportStatistics>(`/reports/statistics${query}`);
   }
 
   async listReportExports(limit = 8) {
@@ -160,13 +180,16 @@ export class ApiClient {
   }
 
   async loadDashboardSnapshot(selectedSubmissionId = ''): Promise<DashboardSnapshot> {
-    const [me, submissions, jobs, auditLogs, statistics, exports] = await Promise.all([
+    const [me, submissions, jobs, auditLogs, statistics, exports, courses, classes, experiments] = await Promise.all([
       this.me(),
       this.listSubmissions(),
       this.listJobs(),
       this.listAuditLogs(),
       this.getReportStatistics(),
       this.listReportExports(),
+      this.listCourses(),
+      this.listClasses(),
+      this.listExperiments(),
     ]);
     const targetSubmissionId = selectedSubmissionId || submissions[0]?.id || '';
     const evaluation = targetSubmissionId ? await this.loadEvaluationForRole(targetSubmissionId, me.role) : null;
@@ -179,6 +202,9 @@ export class ApiClient {
       statistics,
       exports,
       evaluation,
+      courses,
+      classes,
+      experiments,
     };
   }
 
@@ -232,6 +258,17 @@ function buildRequestBody(body: unknown) {
     return body;
   }
   return JSON.stringify(body);
+}
+
+function buildQueryString(filters: Record<string, string | undefined>) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) {
+      params.set(key, value);
+    }
+  }
+  const query = params.toString();
+  return query ? `?${query}` : '';
 }
 
 async function parseResponse(response: Response) {
