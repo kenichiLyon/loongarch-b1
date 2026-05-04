@@ -8,6 +8,7 @@ import type {
   ReportStatistics,
   ReviewMetricScoreInput,
   Submission,
+  UploadedArtifact,
 } from '../types/api';
 
 const tokenStorageKey = 'loongarch-b1.access-token';
@@ -85,6 +86,23 @@ export class ApiClient {
     return submissions.slice(0, limit);
   }
 
+  async createSubmission(payload: { experimentId: string; studentId?: string; attemptNo?: number }) {
+    return this.request<Submission>('/submissions', {
+      method: 'POST',
+      body: payload,
+    });
+  }
+
+  async uploadArtifact(submissionId: string, kind: string, file: File) {
+    const formData = new FormData();
+    formData.set('kind', kind);
+    formData.set('file', file);
+    return this.request<UploadedArtifact>(`/submissions/${encodeURIComponent(submissionId)}/artifacts/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
   async listJobs(limit = 12) {
     return this.request<Job[]>(`/jobs?${new URLSearchParams({ limit: String(limit) })}`);
   }
@@ -95,6 +113,10 @@ export class ApiClient {
 
   async getEvaluation(submissionId: string) {
     return this.request<Evaluation>(`/evaluations/submissions/${encodeURIComponent(submissionId)}`);
+  }
+
+  async getPublishedEvaluation(submissionId: string) {
+    return this.request<Evaluation>(`/evaluations/submissions/${encodeURIComponent(submissionId)}/published`);
   }
 
   async reviewSubmission(submissionId: string, payload: { teacherComment: string; metricScores?: ReviewMetricScoreInput[] }) {
@@ -147,7 +169,7 @@ export class ApiClient {
       this.listReportExports(),
     ]);
     const targetSubmissionId = selectedSubmissionId || submissions[0]?.id || '';
-    const evaluation = targetSubmissionId ? await this.getEvaluation(targetSubmissionId) : null;
+    const evaluation = targetSubmissionId ? await this.loadEvaluationForRole(targetSubmissionId, me.role) : null;
 
     return {
       me,
@@ -160,6 +182,17 @@ export class ApiClient {
     };
   }
 
+  private async loadEvaluationForRole(submissionId: string, role: AuthenticatedUser['role']) {
+    try {
+      return role === 'student' ? await this.getPublishedEvaluation(submissionId) : await this.getEvaluation(submissionId);
+    } catch (error) {
+      if (error instanceof ApiClientError && role === 'student' && error.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
   private async request<T>(
     path: string,
     options: {
@@ -170,7 +203,8 @@ export class ApiClient {
   ): Promise<T> {
     const headers = new Headers();
     headers.set('Accept', 'application/json');
-    if (options.body !== undefined) {
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    if (options.body !== undefined && !isFormData) {
       headers.set('Content-Type', 'application/json');
     }
     if (options.authenticated !== false && this.accessToken) {
@@ -180,7 +214,7 @@ export class ApiClient {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: options.method ?? 'GET',
       headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: buildRequestBody(options.body),
     });
     const payload = await parseResponse(response);
     if (!response.ok) {
@@ -188,6 +222,16 @@ export class ApiClient {
     }
     return payload as T;
   }
+}
+
+function buildRequestBody(body: unknown) {
+  if (body === undefined) {
+    return undefined;
+  }
+  if (typeof FormData !== 'undefined' && body instanceof FormData) {
+    return body;
+  }
+  return JSON.stringify(body);
 }
 
 async function parseResponse(response: Response) {

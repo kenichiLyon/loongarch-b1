@@ -179,9 +179,9 @@ JOB_RUN_ONCE=true pnpm worker:export
 
 ### Web 工作台
 
-前端已提供第一版 PC Web 工作台，覆盖登录、提交复核队列、AI/规则初评查看、教师总评保存、结果发布、异步任务状态、审计日志、统计概览和 Excel/PDF 导出任务创建。页面会在未连接 API、未登录或暂无数据时显示空态/错误态，便于 amd64 Windows/Linux 开发机与 LoongArch + 银河麒麟目标机分别联调。
+前端已提供第一版 PC Web 工作台，覆盖登录、成果提交/上传、提交复核队列、AI/规则初评查看、教师总评保存、结果发布、学生已发布反馈查看、异步任务状态、审计日志、统计概览和 Excel/PDF 导出任务创建。页面会在未连接 API、未登录或暂无数据时显示空态/错误态，便于 amd64 Windows/Linux 开发机与 LoongArch + 银河麒麟目标机分别联调。
 
-当前教师复核入口已支持逐项教师分、指标评语和总评提交；学生端已发布反馈页、课程/班级筛选和上传入口会在后续页面阶段继续补齐。
+当前教师复核入口已支持逐项教师分、指标评语和总评提交；上传入口支持新建提交或复用已有提交 ID 上传成果文件。课程/班级筛选、基础数据维护和更精细的学生端页面会在后续页面阶段继续补齐。
 
 ## 6. 基础 API
 
@@ -209,7 +209,7 @@ JOB_RUN_ONCE=true pnpm worker:export
 - `GET /reports/exports`、`GET /reports/exports/:exportId`：查看报表导出状态、对象存储 key 和文件 hash
 - `GET /reports/exports/:exportId/download`：管理员或导出创建教师下载已成功生成的报表文件
 
-Web 工作台默认读取 `GET /submissions`、`GET /jobs`、`GET /audit-logs`、`GET /reports/statistics`、`GET /reports/exports`，并在选中提交后读取 `GET /evaluations/submissions/:submissionId`。
+Web 工作台默认读取 `GET /submissions`、`GET /jobs`、`GET /audit-logs`、`GET /reports/statistics`、`GET /reports/exports`，并在选中提交后读取 `GET /evaluations/submissions/:submissionId` 或学生已发布反馈接口。上传入口会调用 `POST /submissions` 和 `POST /submissions/:submissionId/artifacts/upload`。
 
 除健康检查和登录/初始化接口外，基础管理接口均需要 Bearer Token；管理员可创建用户，管理员/教师可维护课程、班级、评价模板和实训任务。
 
@@ -340,9 +340,10 @@ pnpm risk:loongarch
 - 教师复核 API：逐项教师分、总评语、最终分确认、发布和学生已发布反馈查看。
 - 报表统计与导出基础能力：已发布成绩统计、常见问题统计、`export_report` worker、最小 `.xlsx`/`.pdf` 生成和对象存储落盘。
 - 报表下载基础能力：后端提供 RBAC 保护的导出下载接口，前端可下载已成功生成的 Excel/PDF。
+- Web 上传与学生反馈基础能力：前端可新建/复用提交上传成果文件，并查看选中提交的已发布反馈。
 
 下一步：
 
 1. 扩展 Word/PDF/OCR/代码包真实解析器与解析回归样例。
-2. 补齐前端学生反馈、课程/班级筛选、上传入口和基础数据维护页面。
+2. 补齐前端课程/班级筛选、基础数据维护和更独立的学生/教师页面导航。
 3. 增强报表图表、PDF 中文字体嵌入、导出下载体验和权限测试。
