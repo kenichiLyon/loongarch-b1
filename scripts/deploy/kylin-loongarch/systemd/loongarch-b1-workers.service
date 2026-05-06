@@ -1,0 +1,14 @@
+[Unit]
+Description=loongarch-b1 Background Workers
+After=network.target postgresql.service loongarch-b1-api.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/loongarch-b1
+EnvironmentFile=/opt/loongarch-b1/.env
+ExecStart=/usr/bin/node /opt/loongarch-b1/apps/api/dist/workers/all-workers.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
