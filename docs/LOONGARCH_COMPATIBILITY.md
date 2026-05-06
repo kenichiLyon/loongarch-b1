@@ -68,4 +68,10 @@
 - 依赖：未新增第三方依赖；Excel/PDF 基础生成仅使用 Node.js `Buffer`、文件系统和 PostgreSQL 查询。
 - 影响：LoongArch 目标环境需验证大批量已发布评价统计查询耗时、`STORAGE_ROOT/report-exports` 写入权限和磁盘容量。当前 PDF 为纯文本基础实现，中文字体嵌入、图表渲染和复杂版式需在银河麒麟目标环境补充字体路径与授权验证。
 
+### 2026-05-06：简洁部署脚本与静态托管
+
+- 变更：API 在检测到 `WEB_DIST_DIR` 时直接托管前端静态产物；新增 `all-workers` 合并 worker 入口和 `scripts/deploy/kylin-loongarch/start-stack.sh` 一键启动脚本。
+- 依赖：仅复用 NestJS/Express 已有运行时依赖与 Node.js 内置模块，未新增第三方 native 依赖。
+- 影响：目标环境可在不安装 Nginx 的前提下通过一条 shell 命令启动 Web、API 和 worker。LoongArch 目标机仍需验证 Node.js 22 二进制可用、systemd service 路径和 PostgreSQL 本地连接配置。
+
 后续每次发现平台差异时，在本文件追加：验证日期、目标环境版本、依赖版本、测试命令、结果和替代方案。

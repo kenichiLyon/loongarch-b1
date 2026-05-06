@@ -15,6 +15,7 @@ CD 工作流会生成 `release/` 目录并上传为 artifact：
 - `web/`：前端 Vite 构建产物，可由 Nginx 或静态服务托管。
 - `api/`：后端 `dist/`、API package.json、数据库迁移 SQL。
 - `docs/`：README、AGENT、部署与开发文档。
+- `scripts/`：部署与运维脚本，包括银河麒麟 + LoongArch 的一键启动脚本与 systemd 模板。
 - `bundles/loongarch-b1-web-<sha>.tar.gz`：前端压缩包。
 - `bundles/loongarch-b1-api-<sha>.tar.gz`：后端压缩包。
 - `bundles/loongarch-b1-docs-<sha>.tar.gz`：文档与清单压缩包。
@@ -35,12 +36,13 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Release 资产包含 web/api/docs 三个压缩包和 `BUILD_MANIFEST.json`。
+Release 资产包含 web/api/docs 三个压缩包和 `BUILD_MANIFEST.json`；自动构建目录中还会包含 `scripts/`，便于直接使用部署脚本。
 
 ## 目标环境落地说明
 
-- Web 产物是静态文件，后续部署到 Nginx 或后端静态服务。
+- Web 产物是静态文件，可部署到 Nginx，也可由 API 进程直接托管。
 - API 产物不包含 `node_modules`，目标环境需按 `pnpm-lock.yaml` 安装生产依赖或使用后续容器镜像。
 - 数据库迁移 SQL 随 API 产物一起发布，部署时执行 `pnpm db:migrate`。
-- 解析 worker 使用同一 API 产物启动，命令为 `pnpm worker:parse`；生产环境可通过 systemd 启动多个 worker 实例。
+- 解析、评价、导出 worker 可通过单一命令 `node dist/workers/all-workers.js` 或 `scripts/deploy/kylin-loongarch/start-stack.sh` 启动。
+- 目标系统部署步骤见 `docs/DEPLOY_KYLIN_LOONGARCH.md`。
 - LoongArch 上仍需按 `docs/LOONGARCH_COMPATIBILITY.md` 验证 Node.js、pnpm、PostgreSQL 和 native optional 依赖。
