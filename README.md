@@ -179,9 +179,9 @@ JOB_RUN_ONCE=true pnpm worker:export
 
 ### Web 工作台
 
-前端已提供第一版 PC Web 工作台，覆盖登录、课程/班级/实训任务选择、成果提交/上传、提交复核队列、AI/规则初评查看、教师总评保存、结果发布、学生已发布反馈查看、异步任务状态、审计日志、统计概览和 Excel/PDF 导出任务创建。页面会在未连接 API、未登录或暂无数据时显示空态/错误态，便于 amd64 Windows/Linux 开发机与 LoongArch + 银河麒麟目标机分别联调。
+前端已提供第一版 PC Web 工作台，覆盖登录、基础数据维护、课程/班级/实训任务选择、成果提交/上传、提交复核队列、AI/规则初评查看、教师总评保存、结果发布、学生已发布反馈查看、异步任务状态、审计日志、统计概览和 Excel/PDF 导出任务创建。页面会在未连接 API、未登录或暂无数据时显示空态/错误态，便于 amd64 Windows/Linux 开发机与 LoongArch + 银河麒麟目标机分别联调。
 
-当前教师复核入口已支持逐项教师分、指标评语和总评提交；上传入口支持从顶部实训任务选择器带入任务 ID，也支持手动输入或复用已有提交 ID 上传成果文件。基础数据维护、更精细的学生端页面和筛选后的提交列表联动会在后续页面阶段继续补齐。
+当前管理员/教师可在 Web 中创建课程、班级、默认评价模板和实训任务，并完成课程-班级绑定；教师复核入口已支持逐项教师分、指标评语和总评提交。上传入口支持从顶部实训任务选择器带入任务 ID，也支持手动输入或复用已有提交 ID 上传成果文件。更精细的学生端页面和筛选后的提交列表联动会在后续页面阶段继续补齐。
 
 ## 6. 基础 API
 
@@ -209,7 +209,7 @@ JOB_RUN_ONCE=true pnpm worker:export
 - `GET /reports/exports`、`GET /reports/exports/:exportId`：查看报表导出状态、对象存储 key 和文件 hash
 - `GET /reports/exports/:exportId/download`：管理员或导出创建教师下载已成功生成的报表文件
 
-Web 工作台默认读取 `GET /courses`、`GET /classes`、`GET /experiments`、`GET /submissions`、`GET /jobs`、`GET /audit-logs`、`GET /reports/statistics`、`GET /reports/exports`，并在选中提交后读取 `GET /evaluations/submissions/:submissionId` 或学生已发布反馈接口。上传入口会调用 `POST /submissions` 和 `POST /submissions/:submissionId/artifacts/upload`，报表概览可按课程、班级、实训任务筛选。
+Web 工作台默认读取 `GET /courses`、`GET /classes`、`GET /rubrics`、`GET /experiments`、`GET /submissions`、`GET /jobs`、`GET /audit-logs`、`GET /reports/statistics`、`GET /reports/exports`，并在选中提交后读取 `GET /evaluations/submissions/:submissionId` 或学生已发布反馈接口。基础数据维护入口会调用 `POST /courses`、`POST /classes`、`POST /courses/:courseId/classes`、`POST /rubrics`、`POST /experiments`；上传入口会调用 `POST /submissions` 和 `POST /submissions/:submissionId/artifacts/upload`，报表概览可按课程、班级、实训任务筛选。
 
 除健康检查和登录/初始化接口外，基础管理接口均需要 Bearer Token；管理员可创建用户，管理员/教师可维护课程、班级、评价模板和实训任务。
 
@@ -320,7 +320,7 @@ pnpm risk:loongarch
 - pnpm monorepo 工程骨架。
 - NestJS 后端健康检查接口。
 - Vue 3 首屏工作台。
-- PC Web 工作台第一版：登录、课程/班级/实训选择、任务状态、教师复核、学生上传/反馈、统计导出和审计查看。
+- PC Web 工作台第一版：登录、基础数据维护、课程/班级/实训选择、任务状态、教师复核、学生上传/反馈、统计导出和审计查看。
 - 核心评价领域契约和权重校验测试。
 - 依赖精确版本、pnpm lockfile 和 CI 冻结安装。
 - 核心 PostgreSQL 数据模型和初始迁移脚本。
@@ -342,9 +342,10 @@ pnpm risk:loongarch
 - 报表下载基础能力：后端提供 RBAC 保护的导出下载接口，前端可下载已成功生成的 Excel/PDF。
 - Web 上传与学生反馈基础能力：前端可新建/复用提交上传成果文件，并查看选中提交的已发布反馈。
 - Web 筛选基础能力：前端可读取课程、班级、实训任务并用于上传任务选择和报表统计筛选。
+- Web 基础数据维护能力：前端可创建课程、班级、默认评价模板、实训任务，并绑定课程和班级。
 
 下一步：
 
 1. 扩展 Word/PDF/OCR/代码包真实解析器与解析回归样例。
-2. 补齐前端基础数据维护、提交列表筛选联动和更独立的学生/教师页面导航。
+2. 补齐前端提交列表筛选联动、更独立的学生/教师页面导航和用户创建页面。
 3. 增强报表图表、PDF 中文字体嵌入、导出下载体验和权限测试。

@@ -10,6 +10,7 @@ import type {
   ReportExport,
   ReportStatistics,
   ReviewMetricScoreInput,
+  RubricTemplate,
   Submission,
   UploadedArtifact,
 } from '../types/api';
@@ -38,6 +39,7 @@ export interface DashboardSnapshot {
   courses: Course[];
   classes: ClassGroup[];
   experiments: Experiment[];
+  rubrics: RubricTemplate[];
 }
 
 export function getDefaultApiBaseUrl() {
@@ -103,6 +105,66 @@ export class ApiClient {
   async listExperiments(courseId = '') {
     const query = courseId ? `?${new URLSearchParams({ courseId })}` : '';
     return this.request<Experiment[]>(`/experiments${query}`);
+  }
+
+  async listRubrics(courseId = '') {
+    const query = courseId ? `?${new URLSearchParams({ courseId })}` : '';
+    return this.request<RubricTemplate[]>(`/rubrics${query}`);
+  }
+
+  async createCourse(payload: { name: string; code: string; description?: string }) {
+    return this.request<Course>('/courses', {
+      method: 'POST',
+      body: payload,
+    });
+  }
+
+  async createClass(payload: { name: string; grade?: string; major?: string }) {
+    return this.request<ClassGroup>('/classes', {
+      method: 'POST',
+      body: payload,
+    });
+  }
+
+  async attachClassToCourse(courseId: string, classId: string) {
+    return this.request<{ courseId: string; classId: string; attached: boolean }>(`/courses/${encodeURIComponent(courseId)}/classes`, {
+      method: 'POST',
+      body: { classId },
+    });
+  }
+
+  async createRubric(payload: {
+    courseId: string;
+    name: string;
+    description?: string;
+    metrics: Array<{
+      name: string;
+      description: string;
+      weight: number;
+      maxScore: number;
+      scoringRule?: string;
+      allowTeacherOverride?: boolean;
+      sortOrder?: number;
+    }>;
+  }) {
+    return this.request<RubricTemplate>('/rubrics', {
+      method: 'POST',
+      body: payload,
+    });
+  }
+
+  async createExperiment(payload: {
+    courseId: string;
+    rubricTemplateId: string;
+    title: string;
+    requirementText: string;
+    dueAt?: string;
+    allowedArtifactKinds?: string[];
+  }) {
+    return this.request<Experiment>('/experiments', {
+      method: 'POST',
+      body: payload,
+    });
   }
 
   async createSubmission(payload: { experimentId: string; studentId?: string; attemptNo?: number }) {
@@ -180,7 +242,7 @@ export class ApiClient {
   }
 
   async loadDashboardSnapshot(selectedSubmissionId = ''): Promise<DashboardSnapshot> {
-    const [me, submissions, jobs, auditLogs, statistics, exports, courses, classes, experiments] = await Promise.all([
+    const [me, submissions, jobs, auditLogs, statistics, exports, courses, classes, experiments, rubrics] = await Promise.all([
       this.me(),
       this.listSubmissions(),
       this.listJobs(),
@@ -190,6 +252,7 @@ export class ApiClient {
       this.listCourses(),
       this.listClasses(),
       this.listExperiments(),
+      this.listRubrics(),
     ]);
     const targetSubmissionId = selectedSubmissionId || submissions[0]?.id || '';
     const evaluation = targetSubmissionId ? await this.loadEvaluationForRole(targetSubmissionId, me.role) : null;
@@ -205,6 +268,7 @@ export class ApiClient {
       courses,
       classes,
       experiments,
+      rubrics,
     };
   }
 
