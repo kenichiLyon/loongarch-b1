@@ -7,7 +7,7 @@ import { DatabaseService } from '../database/database.service';
 import { ArtifactKind, UserRole } from '../domain/core';
 import { LocalObjectStoreService } from '../storage/local-object-store.service';
 import { validateArtifactUpload, type UploadFileLike } from './artifact-upload.policy';
-import type { CreateSubmissionDto, UploadArtifactDto } from './submissions.dto';
+import type { CreateSubmissionDto, ListSubmissionsQueryDto, UploadArtifactDto } from './submissions.dto';
 
 export interface SubmissionRow extends QueryResultRow {
   id: string;
@@ -43,31 +43,9 @@ export class SubmissionsService {
     private readonly auditService: AuditService,
   ) {}
 
-  async listSubmissions(filters: { experimentId?: string; studentId?: string }, user: AuthenticatedUser) {
-    const params: unknown[] = [];
-    const where: string[] = [];
-
-    if (filters.experimentId) {
-      params.push(filters.experimentId);
-      where.push(`experiment_id = $${params.length}`);
-    }
-
-    if (user.role === UserRole.Student) {
-      params.push(user.id);
-      where.push(`student_id = $${params.length}`);
-    } else if (filters.studentId) {
-      params.push(filters.studentId);
-      where.push(`student_id = $${params.length}`);
-    }
-
-    const result = await this.database.query<SubmissionRow>(
-      `SELECT id, experiment_id AS "experimentId", student_id AS "studentId", status, attempt_no AS "attemptNo",
-              submitted_at AS "submittedAt", current_error AS "currentError", created_at AS "createdAt", updated_at AS "updatedAt"
-         FROM submissions
-        ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
-        ORDER BY created_at DESC`,
-      params,
-    );
+  async listSubmissions(filters: ListSubmissionsQueryDto, user: AuthenticatedUser) {
+    const query = buildListSubmissionsSql(filters, user);
+    const result = await this.database.query<SubmissionRow>(query.sql, query.params);
 
     return result.rows;
   }
@@ -164,6 +142,48 @@ export class SubmissionsService {
 
     return submission;
   }
+}
+
+export function buildListSubmissionsSql(filters: ListSubmissionsQueryDto, user: AuthenticatedUser) {
+  const params: unknown[] = [];
+  const where: string[] = [];
+
+  if (filters.experimentId) {
+    params.push(filters.experimentId);
+    where.push(`s.experiment_id = $${params.length}`);
+  }
+  if (filters.courseId) {
+    params.push(filters.courseId);
+    where.push(`e.course_id = $${params.length}`);
+  }
+  if (filters.classId) {
+    params.push(filters.classId);
+    where.push(`en.class_id = $${params.length}`);
+  }
+  if (filters.status) {
+    params.push(filters.status);
+    where.push(`s.status = $${params.length}`);
+  }
+
+  if (user.role === UserRole.Student) {
+    params.push(user.id);
+    where.push(`s.student_id = $${params.length}`);
+  } else if (filters.studentId) {
+    params.push(filters.studentId);
+    where.push(`s.student_id = $${params.length}`);
+  }
+
+  return {
+    sql: `SELECT s.id, s.experiment_id AS "experimentId", s.student_id AS "studentId", s.status,
+                 s.attempt_no AS "attemptNo", s.submitted_at AS "submittedAt", s.current_error AS "currentError",
+                 s.created_at AS "createdAt", s.updated_at AS "updatedAt"
+            FROM submissions s
+            JOIN experiments e ON e.id = s.experiment_id
+            LEFT JOIN enrollments en ON en.student_id = s.student_id AND en.course_id = e.course_id
+           ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+           ORDER BY s.created_at DESC`,
+    params,
+  };
 }
 
 async function removeTemporaryUpload(filePath: string | undefined) {

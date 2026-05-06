@@ -57,7 +57,7 @@
       </label>
       <label>
         班级
-        <select v-model="selectedClassId">
+        <select v-model="selectedClassId" @change="handleClassSelection">
           <option value="">全部班级</option>
           <option v-for="classGroup in classes" :key="classGroup.id" :value="classGroup.id">
             {{ classGroup.name }}{{ classGroup.grade ? ` · ${classGroup.grade}` : '' }}
@@ -66,11 +66,27 @@
       </label>
       <label>
         实训任务
-        <select v-model="uploadForm.experimentId">
+        <select v-model="selectedExperimentId" @change="syncSelectedExperiment">
           <option value="">选择实训任务</option>
           <option v-for="experiment in filteredExperiments" :key="experiment.id" :value="experiment.id">
             {{ experiment.title }}
           </option>
+        </select>
+      </label>
+      <label v-if="sessionUser?.role !== 'student'">
+        学生
+        <select v-model="selectedStudentId">
+          <option value="">全部学生</option>
+          <option v-for="student in filteredStudentOptions" :key="student.id" :value="student.id">
+            {{ student.displayName }} · {{ student.username }}
+          </option>
+        </select>
+      </label>
+      <label>
+        提交状态
+        <select v-model="selectedSubmissionStatus">
+          <option value="">全部状态</option>
+          <option v-for="status in submissionStatusOptions" :key="status.value" :value="status.value">{{ status.label }}</option>
         </select>
       </label>
       <button class="ghost-button" type="button" @click="applyReportFilters">应用报表筛选</button>
@@ -120,6 +136,44 @@
             <button :disabled="isBusy || !classForm.name" type="submit">创建班级</button>
           </form>
 
+          <form v-if="canManageUsers" class="compact-form" @submit.prevent="createUserFromForm">
+            <h3>新建用户</h3>
+            <label>
+              角色
+              <select v-model="userForm.role">
+                <option value="student">学生</option>
+                <option value="teacher">教师</option>
+                <option value="admin">管理员</option>
+              </select>
+            </label>
+            <label>
+              用户名
+              <input v-model="userForm.username" placeholder="student-2301" />
+            </label>
+            <label>
+              显示名
+              <input v-model="userForm.displayName" placeholder="张三" />
+            </label>
+            <label>
+              初始密码
+              <input v-model="userForm.initialPassword" placeholder="至少 8 位" type="password" />
+            </label>
+            <label v-if="userForm.role === 'student'">
+              学号
+              <input v-model="userForm.studentNo" placeholder="20230001" />
+            </label>
+            <label v-else-if="userForm.role === 'teacher'">
+              工号
+              <input v-model="userForm.teacherNo" placeholder="T-1001" />
+            </label>
+            <button
+              :disabled="isBusy || !userForm.username || !userForm.displayName || userForm.initialPassword.length < 8"
+              type="submit"
+            >
+              创建用户
+            </button>
+          </form>
+
           <form class="compact-form" @submit.prevent="attachSelectedClass">
             <h3>绑定课程班级</h3>
             <label>
@@ -137,6 +191,39 @@
               </select>
             </label>
             <button :disabled="isBusy || !foundationSelection.courseId || !foundationSelection.classId" type="submit">绑定</button>
+          </form>
+
+          <form class="compact-form" @submit.prevent="createEnrollmentFromForm">
+            <h3>学生分班选课</h3>
+            <label>
+              学生
+              <select v-model="enrollmentForm.studentId">
+                <option value="">选择学生</option>
+                <option v-for="student in studentUsers" :key="student.id" :value="student.id">
+                  {{ student.displayName }} · {{ student.username }}
+                </option>
+              </select>
+            </label>
+            <label>
+              课程
+              <select v-model="enrollmentForm.courseId">
+                <option value="">选择课程</option>
+                <option v-for="course in courses" :key="course.id" :value="course.id">{{ course.name }} · {{ course.code }}</option>
+              </select>
+            </label>
+            <label>
+              班级
+              <select v-model="enrollmentForm.classId">
+                <option value="">选择班级</option>
+                <option v-for="classGroup in classes" :key="classGroup.id" :value="classGroup.id">{{ classGroup.name }}</option>
+              </select>
+            </label>
+            <button
+              :disabled="isBusy || !enrollmentForm.studentId || !enrollmentForm.courseId || !enrollmentForm.classId"
+              type="submit"
+            >
+              绑定选课
+            </button>
           </form>
 
           <form class="compact-form" @submit.prevent="createRubricFromForm">
@@ -450,6 +537,7 @@ import type {
   AuditLog,
   ClassGroup,
   Course,
+  Enrollment,
   Evaluation,
   Experiment,
   Job,
@@ -458,6 +546,7 @@ import type {
   ReportStatistics,
   RubricTemplate,
   Submission,
+  UserSummary,
   UserRole,
 } from './types/api';
 
@@ -481,10 +570,15 @@ const courses = ref<Course[]>([]);
 const classes = ref<ClassGroup[]>([]);
 const experiments = ref<Experiment[]>([]);
 const rubrics = ref<RubricTemplate[]>([]);
+const users = ref<UserSummary[]>([]);
+const enrollments = ref<Enrollment[]>([]);
 const evaluation = ref<Evaluation | null>(null);
 const selectedSubmissionId = ref('');
 const selectedCourseId = ref('');
 const selectedClassId = ref('');
+const selectedExperimentId = ref('');
+const selectedStudentId = ref('');
+const selectedSubmissionStatus = ref('');
 const teacherComment = ref('');
 const metricReviewDraft = reactive<Record<string, { teacherScore: string; comment: string }>>({});
 const publishedFeedback = ref<Evaluation | null>(null);
@@ -499,6 +593,19 @@ const classForm = reactive({
   major: '',
 });
 const foundationSelection = reactive({
+  courseId: '',
+  classId: '',
+});
+const userForm = reactive({
+  role: 'student' as UserRole,
+  username: '',
+  displayName: '',
+  initialPassword: '',
+  studentNo: '',
+  teacherNo: '',
+});
+const enrollmentForm = reactive({
+  studentId: '',
   courseId: '',
   classId: '',
 });
@@ -567,7 +674,22 @@ const defaultRubricMetrics = [
 ];
 
 const canManageFoundation = computed(() => sessionUser.value?.role === 'admin' || sessionUser.value?.role === 'teacher');
+const canManageUsers = computed(() => sessionUser.value?.role === 'admin');
 const runningJobCount = computed(() => jobs.value.filter((job) => job.status === 'running').length);
+const studentUsers = computed(() => users.value.filter((user) => user.role === 'student'));
+const filteredStudentOptions = computed(() => {
+  let candidates = studentUsers.value;
+  if (!selectedCourseId.value && !selectedClassId.value) {
+    return candidates;
+  }
+  const studentIds = new Set(
+    enrollments.value
+      .filter((enrollment) => (!selectedCourseId.value || enrollment.courseId === selectedCourseId.value) && (!selectedClassId.value || enrollment.classId === selectedClassId.value))
+      .map((enrollment) => enrollment.studentId),
+  );
+  candidates = candidates.filter((user) => studentIds.has(user.id));
+  return candidates;
+});
 const filteredExperiments = computed(() => {
   if (!selectedCourseId.value) {
     return experiments.value;
@@ -600,6 +722,14 @@ const statusCards = computed(() => [
     hint: '教师确认后才能发布',
   },
 ]);
+const submissionStatusOptions = [
+  { value: 'draft', label: '草稿' },
+  { value: 'parsing', label: '解析中' },
+  { value: 'evaluating', label: '评价中' },
+  { value: 'teacher_review', label: '待复核' },
+  { value: 'published', label: '已发布' },
+  { value: 'failed', label: '失败' },
+];
 
 onMounted(() => {
   void refreshDashboard();
@@ -630,11 +760,35 @@ async function refreshDashboard() {
     classes.value = snapshot.classes;
     experiments.value = snapshot.experiments;
     rubrics.value = snapshot.rubrics;
+    users.value = snapshot.users;
+    enrollments.value = snapshot.enrollments;
     evaluation.value = snapshot.evaluation;
     selectedSubmissionId.value = snapshot.evaluation?.submissionId ?? snapshot.submissions[0]?.id ?? '';
     teacherComment.value = snapshot.evaluation?.teacherComment ?? '';
     resetMetricReviewDraft(snapshot.evaluation?.metricScores ?? []);
     publishedFeedback.value = null;
+    if (selectedCourseId.value || selectedClassId.value || selectedExperimentId.value || selectedStudentId.value || selectedSubmissionStatus.value) {
+      await applyDashboardFilters(false);
+    }
+  });
+}
+
+async function createUserFromForm() {
+  await withBusy(async () => {
+    const created = await apiClient.createUser({
+      role: userForm.role,
+      username: userForm.username.trim(),
+      displayName: userForm.displayName.trim(),
+      initialPassword: userForm.initialPassword,
+      studentNo: userForm.role === 'student' ? userForm.studentNo.trim() || undefined : undefined,
+      teacherNo: userForm.role === 'teacher' ? userForm.teacherNo.trim() || undefined : undefined,
+    });
+    users.value = await apiClient.listUsers();
+    if (created.role === 'student') {
+      enrollmentForm.studentId = created.id;
+    }
+    resetUserForm();
+    viewMessage.value = '用户已创建。';
   });
 }
 
@@ -679,6 +833,22 @@ async function attachSelectedClass() {
   });
 }
 
+async function createEnrollmentFromForm() {
+  await withBusy(async () => {
+    const enrollment = await apiClient.createEnrollment({
+      studentId: enrollmentForm.studentId,
+      courseId: enrollmentForm.courseId,
+      classId: enrollmentForm.classId,
+    });
+    enrollments.value = await apiClient.listEnrollments();
+    selectedCourseId.value = enrollment.courseId;
+    selectedClassId.value = enrollment.classId;
+    selectedStudentId.value = enrollment.studentId;
+    resetEnrollmentForm();
+    viewMessage.value = '学生选课分班已保存。';
+  });
+}
+
 async function createRubricFromForm() {
   await withBusy(async () => {
     const rubric = await apiClient.createRubric({
@@ -710,6 +880,7 @@ async function createExperimentFromForm() {
     });
     experiments.value = await apiClient.listExperiments();
     selectedCourseId.value = experiment.courseId;
+    selectedExperimentId.value = experiment.id;
     uploadForm.experimentId = experiment.id;
     resetExperimentForm({ keepCourseId: experiment.courseId, keepRubricTemplateId: experiment.rubricTemplateId });
     viewMessage.value = '实训任务已创建，可直接上传成果。';
@@ -720,6 +891,10 @@ async function handleCourseSelection() {
   if (!selectedCourseId.value) {
     experiments.value = await apiClient.listExperiments();
     rubrics.value = await apiClient.listRubrics();
+    selectedStudentId.value = '';
+    if (selectedExperimentId.value && !experiments.value.some((experiment) => experiment.id === selectedExperimentId.value)) {
+      selectedExperimentId.value = '';
+    }
     return;
   }
   const [courseExperiments, courseRubrics] = await Promise.all([
@@ -733,7 +908,23 @@ async function handleCourseSelection() {
   if (uploadForm.experimentId && !experiments.value.some((experiment) => experiment.id === uploadForm.experimentId)) {
     uploadForm.experimentId = '';
   }
+  if (selectedExperimentId.value && !experiments.value.some((experiment) => experiment.id === selectedExperimentId.value)) {
+    selectedExperimentId.value = '';
+  }
+  if (selectedStudentId.value && !filteredStudentOptions.value.some((student) => student.id === selectedStudentId.value)) {
+    selectedStudentId.value = '';
+  }
   syncExperimentRubric();
+}
+
+function handleClassSelection() {
+  if (selectedStudentId.value && !filteredStudentOptions.value.some((student) => student.id === selectedStudentId.value)) {
+    selectedStudentId.value = '';
+  }
+}
+
+function syncSelectedExperiment() {
+  uploadForm.experimentId = selectedExperimentId.value;
 }
 
 function syncExperimentRubric() {
@@ -751,22 +942,37 @@ function rubricOptionsForCourse(courseId: string) {
 }
 
 async function applyReportFilters() {
+  await applyDashboardFilters(true);
+}
+
+async function applyDashboardFilters(announce: boolean) {
   await withBusy(async () => {
+    submissions.value = await apiClient.listSubmissions({
+      courseId: selectedCourseId.value || undefined,
+      classId: selectedClassId.value || undefined,
+      experimentId: selectedExperimentId.value || undefined,
+      studentId: selectedStudentId.value || undefined,
+      status: selectedSubmissionStatus.value || undefined,
+    });
     statistics.value = await apiClient.getReportStatistics({
       courseId: selectedCourseId.value || undefined,
       classId: selectedClassId.value || undefined,
-      experimentId: uploadForm.experimentId || undefined,
+      experimentId: selectedExperimentId.value || undefined,
+      studentId: selectedStudentId.value || undefined,
     });
-    viewMessage.value = '报表筛选已应用。';
+    await syncSelectionAfterSubmissionRefresh();
+    if (announce) {
+      viewMessage.value = '报表与提交筛选已应用。';
+    }
   });
 }
 
 async function selectSubmission(submissionId: string) {
   await withBusy(async () => {
     selectedSubmissionId.value = submissionId;
-    evaluation.value = await apiClient.getEvaluation(submissionId);
-    teacherComment.value = evaluation.value.teacherComment ?? '';
-    resetMetricReviewDraft(evaluation.value.metricScores);
+    evaluation.value = await loadEvaluationForCurrentRole(submissionId);
+    teacherComment.value = evaluation.value?.teacherComment ?? '';
+    resetMetricReviewDraft(evaluation.value?.metricScores ?? []);
     publishedFeedback.value = null;
   });
 }
@@ -828,9 +1034,16 @@ async function submitArtifactUpload() {
     const artifact = await apiClient.uploadArtifact(submissionId, uploadForm.kind, uploadForm.file as File);
     viewMessage.value = `成果 ${artifact.originalName} 已上传，解析任务已入队。`;
     uploadForm.file = null;
-    submissions.value = await apiClient.listSubmissions();
+    submissions.value = await apiClient.listSubmissions({
+      courseId: selectedCourseId.value || undefined,
+      classId: selectedClassId.value || undefined,
+      experimentId: selectedExperimentId.value || undefined,
+      studentId: selectedStudentId.value || undefined,
+      status: selectedSubmissionStatus.value || undefined,
+    });
     jobs.value = await apiClient.listJobs();
     auditLogs.value = await apiClient.listAuditLogs();
+    await syncSelectionAfterSubmissionRefresh();
   });
 }
 
@@ -912,6 +1125,21 @@ function resetUploadForm() {
   uploadForm.file = null;
 }
 
+function resetUserForm() {
+  userForm.role = 'student';
+  userForm.username = '';
+  userForm.displayName = '';
+  userForm.initialPassword = '';
+  userForm.studentNo = '';
+  userForm.teacherNo = '';
+}
+
+function resetEnrollmentForm() {
+  enrollmentForm.studentId = '';
+  enrollmentForm.courseId = '';
+  enrollmentForm.classId = '';
+}
+
 function resetCourseForm() {
   courseForm.name = '';
   courseForm.code = '';
@@ -930,6 +1158,35 @@ function resetExperimentForm(options: { keepCourseId: string; keepRubricTemplate
   experimentForm.title = '';
   experimentForm.requirementText = '';
   experimentForm.dueAt = '';
+}
+
+async function syncSelectionAfterSubmissionRefresh() {
+  if (submissions.value.length === 0) {
+    selectedSubmissionId.value = '';
+    evaluation.value = null;
+    publishedFeedback.value = null;
+    return;
+  }
+  if (!submissions.value.some((submission) => submission.id === selectedSubmissionId.value)) {
+    selectedSubmissionId.value = submissions.value[0].id;
+  }
+  evaluation.value = selectedSubmissionId.value ? await loadEvaluationForCurrentRole(selectedSubmissionId.value) : null;
+  teacherComment.value = evaluation.value?.teacherComment ?? '';
+  resetMetricReviewDraft(evaluation.value?.metricScores ?? []);
+}
+
+async function loadEvaluationForCurrentRole(submissionId: string) {
+  if (sessionUser.value?.role === 'student') {
+    try {
+      return await apiClient.getPublishedEvaluation(submissionId);
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  }
+  return apiClient.getEvaluation(submissionId);
 }
 
 async function withBusy(action: () => Promise<void>) {

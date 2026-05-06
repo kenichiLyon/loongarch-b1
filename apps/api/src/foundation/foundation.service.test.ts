@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BadRequestException } from '@nestjs/common';
-import { hashPassword, validateRubricOrThrow, verifyPassword } from './foundation.service';
+import { buildListEnrollmentsSql, hashPassword, validateRubricOrThrow, verifyPassword } from './foundation.service';
 
 test('hashes and verifies initial user passwords', () => {
   const encoded = hashPassword('password-123', 'fixed-salt');
@@ -27,4 +27,17 @@ test('rejects rubric metrics whose weights do not sum to 100', () => {
       }),
     BadRequestException,
   );
+});
+
+test('builds enrollment filters with positional parameters', () => {
+  const query = buildListEnrollmentsSql({
+    courseId: 'course-id',
+    classId: 'class-id',
+    studentId: 'student-id',
+  });
+
+  assert.match(query.sql, /en\.course_id = \$1/);
+  assert.match(query.sql, /en\.class_id = \$2/);
+  assert.match(query.sql, /en\.student_id = \$3/);
+  assert.deepEqual(query.params, ['course-id', 'class-id', 'student-id']);
 });

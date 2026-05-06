@@ -13,7 +13,7 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { UserRole } from '../domain/core';
 import { sanitizeFileName } from '../storage/local-object-store.service';
 import { readUploadMaxBytes } from './artifact-upload.policy';
-import { CreateSubmissionDto, UploadArtifactDto } from './submissions.dto';
+import { CreateSubmissionDto, ListSubmissionsQueryDto, UploadArtifactDto } from './submissions.dto';
 import { SubmissionsService } from './submissions.service';
 
 const multerUploadLimit = Number(process.env.UPLOAD_MAX_BYTES ?? 20 * 1024 * 1024);
@@ -29,10 +29,9 @@ export class SubmissionsController {
   @Get()
   listSubmissions(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('experimentId') experimentId?: string,
-    @Query('studentId') studentId?: string,
+    @Query() query: ListSubmissionsQueryDto,
   ) {
-    return this.submissionsService.listSubmissions({ experimentId, studentId }, user);
+    return this.submissionsService.listSubmissions(query, user);
   }
 
   @Roles(UserRole.Admin, UserRole.Teacher, UserRole.Student)

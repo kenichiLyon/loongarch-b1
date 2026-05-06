@@ -5,16 +5,30 @@ import { DatabaseService } from '../database/database.service';
 import { RubricMetric, validateRubricMetrics } from '../domain/core';
 import {
   AttachCourseClassDto,
+  CreateEnrollmentDto,
   CreateClassDto,
   CreateCourseDto,
   CreateExperimentDto,
   CreateRubricDto,
   CreateUserDto,
+  ListEnrollmentsQueryDto,
 } from './foundation.dto';
 
 const defaultArtifactKinds = ['word', 'pdf', 'image', 'code_archive', 'git_link'];
 
 type Row = Record<string, unknown>;
+
+export interface EnrollmentRow extends Row {
+  id: string;
+  studentId: string;
+  courseId: string;
+  classId: string;
+  studentUsername: string;
+  studentDisplayName: string;
+  courseName: string;
+  className: string;
+  createdAt: string;
+}
 
 @Injectable()
 export class FoundationService {
@@ -104,6 +118,29 @@ export class FoundationService {
       [courseId, dto.classId],
     );
     return { courseId, classId: dto.classId, attached: true };
+  }
+
+  async listEnrollments(filters: ListEnrollmentsQueryDto = {}) {
+    const query = buildListEnrollmentsSql(filters);
+    const result = await this.database.query<EnrollmentRow>(query.sql, query.params);
+    return result.rows;
+  }
+
+  async createEnrollment(dto: CreateEnrollmentDto) {
+    await this.database.query(
+      `INSERT INTO enrollments (student_id, course_id, class_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (student_id, course_id)
+       DO UPDATE SET class_id = EXCLUDED.class_id`,
+      [dto.studentId, dto.courseId, dto.classId],
+    );
+    const result = await this.database.query<EnrollmentRow>(
+      `${selectEnrollmentColumnsSql()}
+        WHERE en.student_id = $1
+          AND en.course_id = $2`,
+      [dto.studentId, dto.courseId],
+    );
+    return result.rows[0];
   }
 
   async listRubrics(courseId?: string) {
@@ -198,6 +235,31 @@ export class FoundationService {
   }
 }
 
+export function buildListEnrollmentsSql(filters: ListEnrollmentsQueryDto = {}) {
+  const params: unknown[] = [];
+  const where: string[] = [];
+
+  if (filters.courseId) {
+    params.push(filters.courseId);
+    where.push(`en.course_id = $${params.length}`);
+  }
+  if (filters.classId) {
+    params.push(filters.classId);
+    where.push(`en.class_id = $${params.length}`);
+  }
+  if (filters.studentId) {
+    params.push(filters.studentId);
+    where.push(`en.student_id = $${params.length}`);
+  }
+
+  return {
+    sql: `${selectEnrollmentColumnsSql()}
+        ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+        ORDER BY en.created_at DESC`,
+    params,
+  };
+}
+
 export function hashPassword(password: string, salt = randomBytes(16).toString('hex')) {
   const hash = scryptSync(password, salt, 64).toString('hex');
   return `scrypt$${salt}$${hash}`;
@@ -252,4 +314,14 @@ async function insertRubricMetrics(client: PoolClient, rubricId: string, metrics
     rows.push(result.rows[0]);
   }
   return rows;
+}
+
+function selectEnrollmentColumnsSql() {
+  return `SELECT en.id, en.student_id AS "studentId", en.course_id AS "courseId", en.class_id AS "classId",
+                 u.username AS "studentUsername", u.display_name AS "studentDisplayName",
+                 c.name AS "courseName", cl.name AS "className", en.created_at AS "createdAt"
+            FROM enrollments en
+            JOIN users u ON u.id = en.student_id
+            JOIN courses c ON c.id = en.course_id
+            JOIN classes cl ON cl.id = en.class_id`;
 }

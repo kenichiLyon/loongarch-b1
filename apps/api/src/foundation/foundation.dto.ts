@@ -92,6 +92,31 @@ export class AttachCourseClassDto {
   classId!: string;
 }
 
+export class CreateEnrollmentDto {
+  @IsUUID()
+  studentId!: string;
+
+  @IsUUID()
+  courseId!: string;
+
+  @IsUUID()
+  classId!: string;
+}
+
+export class ListEnrollmentsQueryDto {
+  @IsOptional()
+  @IsUUID()
+  courseId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  classId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  studentId?: string;
+}
+
 export class CreateRubricMetricDto {
   @IsString()
   @MinLength(1)
