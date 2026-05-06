@@ -74,4 +74,10 @@
 - 依赖：仅复用 NestJS/Express 已有运行时依赖与 Node.js 内置模块，未新增第三方 native 依赖。
 - 影响：目标环境可在不安装 Nginx 的前提下通过一条 shell 命令启动 Web、API 和 worker。LoongArch 目标机仍需验证 Node.js 22 二进制可用、systemd service 路径和 PostgreSQL 本地连接配置。
 
+### 2026-05-06：解析增强仍保持纯 Node.js 依赖
+
+- 变更：新增 `docx` XML 文本提取、基础 PDF 文本流提取、`zip/tar/tgz/gz` 结构摘要和图片元数据读取。
+- 依赖：仅使用 Node.js 内置 `zlib`、`Buffer` 和文件路径处理，未新增第三方 native 依赖。
+- 影响：LoongArch 目标环境无需为解析层额外安装 OCR/Office native 组件；复杂 OCR、旧版 `.doc` 和深度 PDF 解析仍保留为后续增强，不阻塞首版部署。
+
 后续每次发现平台差异时，在本文件追加：验证日期、目标环境版本、依赖版本、测试命令、结果和替代方案。

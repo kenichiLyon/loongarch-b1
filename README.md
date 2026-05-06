@@ -171,6 +171,16 @@ JOB_RUN_ONCE=true pnpm worker:export
 
 当前导出基础能力不引入 native 依赖：Excel 使用最小 OpenXML `.xlsx`，PDF 使用内置纯文本 PDF 生成器。PDF 中文字体嵌入、图表渲染和复杂版式仍作为目标环境验证项后续增强。
 
+当前解析基础能力同样坚持“无新增 native 依赖”：
+
+- 文本类：`txt/md/json/csv`
+- Word：`docx` 解包 XML 后提取正文文本
+- PDF：基础文本流提取
+- 代码包：`zip/tar/tgz/gz` 文件结构摘要
+- 图片：尺寸等元数据提取
+
+OCR、旧版 `.doc`、复杂或加密 PDF、深度代码语义分析仍保留为后续增强项。
+
 当前脚手架验证目标：
 
 - NestJS 后端 TypeScript 编译通过。
@@ -338,6 +348,7 @@ pnpm risk:loongarch
 - CI 已纳入仓库脚本测试，保证 LoongArch 风险扫描逻辑随 PR 自动验证。
 - OpenAI-compatible LLM Gateway、脱敏证据摘要、JSON 初评校验、评价 worker 和 AI 草稿落库。
 - 确定性规则核查基础能力：需求覆盖、步骤完整性、文档证据质量、异常/Prompt Injection 风险识别和指标 `rule_score` 落库。
+- 解析增强基础能力：`docx/pdf/zip/tar/tgz/gz/image metadata` 的确定性提取与可降级回退。
 - 教师复核 API：逐项教师分、总评语、最终分确认、发布和学生已发布反馈查看。
 - 报表统计与导出基础能力：已发布成绩统计、常见问题统计、`export_report` worker、最小 `.xlsx`/`.pdf` 生成和对象存储落盘。
 - 报表下载基础能力：后端提供 RBAC 保护的导出下载接口，前端可下载已成功生成的 Excel/PDF。
@@ -348,6 +359,6 @@ pnpm risk:loongarch
 
 下一步：
 
-1. 扩展 Word/PDF/OCR/代码包真实解析器与解析回归样例。
+1. 扩展 OCR、旧版 `.doc`、复杂 PDF 和更深的代码语义解析能力，并补更多解析回归样例。
 2. 补齐更独立的学生/教师页面导航、教师端任务看板细分视图和 enrollment 批量导入能力。
 3. 增强报表图表、PDF 中文字体嵌入、导出下载体验和权限测试。
