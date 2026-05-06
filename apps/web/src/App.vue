@@ -77,6 +77,132 @@
     </section>
 
     <section class="workspace-grid" aria-label="工作台">
+      <article v-if="canManageFoundation" class="work-card work-card--wide">
+        <header class="card-header">
+          <div>
+            <span class="panel-kicker">Foundation Setup</span>
+            <h2>基础数据维护</h2>
+          </div>
+          <span class="badge">课程 / 班级 / 模板 / 任务</span>
+        </header>
+        <div class="foundation-layout">
+          <form class="compact-form" @submit.prevent="createCourseFromForm">
+            <h3>新建课程</h3>
+            <label>
+              课程名称
+              <input v-model="courseForm.name" placeholder="软件工程综合实训" />
+            </label>
+            <label>
+              课程代码
+              <input v-model="courseForm.code" placeholder="SE-PRACTICE-2026" />
+            </label>
+            <label>
+              课程说明
+              <input v-model="courseForm.description" placeholder="可选" />
+            </label>
+            <button :disabled="isBusy || !courseForm.name || !courseForm.code" type="submit">创建课程</button>
+          </form>
+
+          <form class="compact-form" @submit.prevent="createClassFromForm">
+            <h3>新建班级</h3>
+            <label>
+              班级名称
+              <input v-model="classForm.name" placeholder="软件 2301" />
+            </label>
+            <label>
+              年级
+              <input v-model="classForm.grade" placeholder="2023" />
+            </label>
+            <label>
+              专业
+              <input v-model="classForm.major" placeholder="软件技术" />
+            </label>
+            <button :disabled="isBusy || !classForm.name" type="submit">创建班级</button>
+          </form>
+
+          <form class="compact-form" @submit.prevent="attachSelectedClass">
+            <h3>绑定课程班级</h3>
+            <label>
+              课程
+              <select v-model="foundationSelection.courseId">
+                <option value="">选择课程</option>
+                <option v-for="course in courses" :key="course.id" :value="course.id">{{ course.name }} · {{ course.code }}</option>
+              </select>
+            </label>
+            <label>
+              班级
+              <select v-model="foundationSelection.classId">
+                <option value="">选择班级</option>
+                <option v-for="classGroup in classes" :key="classGroup.id" :value="classGroup.id">{{ classGroup.name }}</option>
+              </select>
+            </label>
+            <button :disabled="isBusy || !foundationSelection.courseId || !foundationSelection.classId" type="submit">绑定</button>
+          </form>
+
+          <form class="compact-form" @submit.prevent="createRubricFromForm">
+            <h3>默认评价模板</h3>
+            <label>
+              课程
+              <select v-model="rubricForm.courseId">
+                <option value="">选择课程</option>
+                <option v-for="course in courses" :key="course.id" :value="course.id">{{ course.name }} · {{ course.code }}</option>
+              </select>
+            </label>
+            <label>
+              模板名称
+              <input v-model="rubricForm.name" />
+            </label>
+            <ul class="mini-list">
+              <li v-for="metric in defaultRubricMetrics" :key="metric.name">
+                <span>{{ metric.name }}</span>
+                <strong>{{ metric.weight }}%</strong>
+              </li>
+            </ul>
+            <button :disabled="isBusy || !rubricForm.courseId || !rubricForm.name" type="submit">创建模板</button>
+          </form>
+
+          <form class="compact-form compact-form--wide" @submit.prevent="createExperimentFromForm">
+            <h3>新建实训任务</h3>
+            <div class="form-row">
+              <label>
+                课程
+                <select v-model="experimentForm.courseId" @change="syncExperimentRubric">
+                  <option value="">选择课程</option>
+                  <option v-for="course in courses" :key="course.id" :value="course.id">{{ course.name }} · {{ course.code }}</option>
+                </select>
+              </label>
+              <label>
+                评价模板
+                <select v-model="experimentForm.rubricTemplateId">
+                  <option value="">选择模板</option>
+                  <option v-for="rubric in rubricOptionsForCourse(experimentForm.courseId)" :key="rubric.id" :value="rubric.id">
+                    {{ rubric.name }} v{{ rubric.version }}
+                  </option>
+                </select>
+              </label>
+            </div>
+            <label>
+              任务标题
+              <input v-model="experimentForm.title" placeholder="软件实训成果提交与验收" />
+            </label>
+            <label>
+              实训要求
+              <textarea v-model="experimentForm.requirementText" placeholder="列出功能、步骤、报告、截图、代码等提交要求。" />
+            </label>
+            <label>
+              截止时间
+              <input v-model="experimentForm.dueAt" type="datetime-local" />
+            </label>
+            <button
+              :disabled="isBusy || !experimentForm.courseId || !experimentForm.rubricTemplateId || !experimentForm.title || !experimentForm.requirementText"
+              type="submit"
+            >
+              创建实训任务
+            </button>
+          </form>
+        </div>
+      </article>
+
       <article class="work-card work-card--wide">
         <header class="card-header">
           <div>
@@ -330,6 +456,7 @@ import type {
   MetricScore,
   ReportExport,
   ReportStatistics,
+  RubricTemplate,
   Submission,
   UserRole,
 } from './types/api';
@@ -353,6 +480,7 @@ const reportExports = ref<ReportExport[]>([]);
 const courses = ref<Course[]>([]);
 const classes = ref<ClassGroup[]>([]);
 const experiments = ref<Experiment[]>([]);
+const rubrics = ref<RubricTemplate[]>([]);
 const evaluation = ref<Evaluation | null>(null);
 const selectedSubmissionId = ref('');
 const selectedCourseId = ref('');
@@ -360,6 +488,32 @@ const selectedClassId = ref('');
 const teacherComment = ref('');
 const metricReviewDraft = reactive<Record<string, { teacherScore: string; comment: string }>>({});
 const publishedFeedback = ref<Evaluation | null>(null);
+const courseForm = reactive({
+  name: '',
+  code: '',
+  description: '',
+});
+const classForm = reactive({
+  name: '',
+  grade: '',
+  major: '',
+});
+const foundationSelection = reactive({
+  courseId: '',
+  classId: '',
+});
+const rubricForm = reactive({
+  courseId: '',
+  name: '软件实训综合评价模板',
+  description: '围绕功能实现、代码质量、文档规范和过程证据的默认评价模板。',
+});
+const experimentForm = reactive({
+  courseId: '',
+  rubricTemplateId: '',
+  title: '',
+  requirementText: '',
+  dueAt: '',
+});
 const uploadForm = reactive<{
   experimentId: string;
   studentId: string;
@@ -381,7 +535,38 @@ const artifactKindOptions: Array<{ value: ArtifactKind; label: string }> = [
   { value: 'code_archive', label: '代码压缩包' },
   { value: 'other', label: '其他文本材料' },
 ];
+const defaultRubricMetrics = [
+  {
+    name: '功能实现度',
+    description: '核心功能、需求覆盖和可演示结果。',
+    weight: 40,
+    maxScore: 100,
+    scoringRule: '检查需求覆盖、功能完整性和运行/截图证据。',
+  },
+  {
+    name: '代码质量',
+    description: '结构清晰度、可维护性、异常处理和基础安全。',
+    weight: 25,
+    maxScore: 100,
+    scoringRule: '检查代码结构、命名、重复度、异常处理和明显风险。',
+  },
+  {
+    name: '文档规范性',
+    description: '报告格式、关键章节、图表截图和复现实训说明。',
+    weight: 20,
+    maxScore: 100,
+    scoringRule: '检查报告完整性、格式规范、截图证据和说明清晰度。',
+  },
+  {
+    name: '过程完整性',
+    description: '实训步骤、测试记录、问题分析和改进说明。',
+    weight: 15,
+    maxScore: 100,
+    scoringRule: '检查步骤记录、测试说明、问题定位和改进过程。',
+  },
+];
 
+const canManageFoundation = computed(() => sessionUser.value?.role === 'admin' || sessionUser.value?.role === 'teacher');
 const runningJobCount = computed(() => jobs.value.filter((job) => job.status === 'running').length);
 const filteredExperiments = computed(() => {
   if (!selectedCourseId.value) {
@@ -444,6 +629,7 @@ async function refreshDashboard() {
     courses.value = snapshot.courses;
     classes.value = snapshot.classes;
     experiments.value = snapshot.experiments;
+    rubrics.value = snapshot.rubrics;
     evaluation.value = snapshot.evaluation;
     selectedSubmissionId.value = snapshot.evaluation?.submissionId ?? snapshot.submissions[0]?.id ?? '';
     teacherComment.value = snapshot.evaluation?.teacherComment ?? '';
@@ -452,15 +638,116 @@ async function refreshDashboard() {
   });
 }
 
+async function createCourseFromForm() {
+  await withBusy(async () => {
+    const course = await apiClient.createCourse({
+      name: courseForm.name.trim(),
+      code: courseForm.code.trim(),
+      description: courseForm.description.trim() || undefined,
+    });
+    courses.value = await apiClient.listCourses();
+    selectedCourseId.value = course.id;
+    foundationSelection.courseId = course.id;
+    rubricForm.courseId = course.id;
+    experimentForm.courseId = course.id;
+    resetCourseForm();
+    viewMessage.value = '课程已创建。';
+  });
+}
+
+async function createClassFromForm() {
+  await withBusy(async () => {
+    const classGroup = await apiClient.createClass({
+      name: classForm.name.trim(),
+      grade: classForm.grade.trim() || undefined,
+      major: classForm.major.trim() || undefined,
+    });
+    classes.value = await apiClient.listClasses();
+    selectedClassId.value = classGroup.id;
+    foundationSelection.classId = classGroup.id;
+    resetClassForm();
+    viewMessage.value = '班级已创建。';
+  });
+}
+
+async function attachSelectedClass() {
+  await withBusy(async () => {
+    await apiClient.attachClassToCourse(foundationSelection.courseId, foundationSelection.classId);
+    selectedCourseId.value = foundationSelection.courseId;
+    selectedClassId.value = foundationSelection.classId;
+    viewMessage.value = '课程和班级已绑定。';
+  });
+}
+
+async function createRubricFromForm() {
+  await withBusy(async () => {
+    const rubric = await apiClient.createRubric({
+      courseId: rubricForm.courseId,
+      name: rubricForm.name.trim(),
+      description: rubricForm.description,
+      metrics: defaultRubricMetrics.map((metric, index) => ({
+        ...metric,
+        allowTeacherOverride: true,
+        sortOrder: index,
+      })),
+    });
+    rubrics.value = await apiClient.listRubrics();
+    experimentForm.courseId = rubric.courseId;
+    experimentForm.rubricTemplateId = rubric.id;
+    viewMessage.value = '评价模板已创建。';
+  });
+}
+
+async function createExperimentFromForm() {
+  await withBusy(async () => {
+    const experiment = await apiClient.createExperiment({
+      courseId: experimentForm.courseId,
+      rubricTemplateId: experimentForm.rubricTemplateId,
+      title: experimentForm.title.trim(),
+      requirementText: experimentForm.requirementText.trim(),
+      dueAt: experimentForm.dueAt ? new Date(experimentForm.dueAt).toISOString() : undefined,
+      allowedArtifactKinds: artifactKindOptions.map((option) => option.value),
+    });
+    experiments.value = await apiClient.listExperiments();
+    selectedCourseId.value = experiment.courseId;
+    uploadForm.experimentId = experiment.id;
+    resetExperimentForm({ keepCourseId: experiment.courseId, keepRubricTemplateId: experiment.rubricTemplateId });
+    viewMessage.value = '实训任务已创建，可直接上传成果。';
+  });
+}
+
 async function handleCourseSelection() {
   if (!selectedCourseId.value) {
     experiments.value = await apiClient.listExperiments();
+    rubrics.value = await apiClient.listRubrics();
     return;
   }
-  experiments.value = await apiClient.listExperiments(selectedCourseId.value);
+  const [courseExperiments, courseRubrics] = await Promise.all([
+    apiClient.listExperiments(selectedCourseId.value),
+    apiClient.listRubrics(selectedCourseId.value),
+  ]);
+  experiments.value = courseExperiments;
+  rubrics.value = courseRubrics;
+  rubricForm.courseId = selectedCourseId.value;
+  experimentForm.courseId = selectedCourseId.value;
   if (uploadForm.experimentId && !experiments.value.some((experiment) => experiment.id === uploadForm.experimentId)) {
     uploadForm.experimentId = '';
   }
+  syncExperimentRubric();
+}
+
+function syncExperimentRubric() {
+  const options = rubricOptionsForCourse(experimentForm.courseId);
+  if (!options.some((rubric) => rubric.id === experimentForm.rubricTemplateId)) {
+    experimentForm.rubricTemplateId = options[0]?.id ?? '';
+  }
+}
+
+function rubricOptionsForCourse(courseId: string) {
+  if (!courseId) {
+    return rubrics.value;
+  }
+  return rubrics.value.filter((rubric) => rubric.courseId === courseId);
 }
 
 async function applyReportFilters() {
@@ -623,6 +910,26 @@ function resetUploadForm() {
   uploadForm.submissionId = '';
   uploadForm.kind = 'pdf';
   uploadForm.file = null;
+}
+
+function resetCourseForm() {
+  courseForm.name = '';
+  courseForm.code = '';
+  courseForm.description = '';
+}
+
+function resetClassForm() {
+  classForm.name = '';
+  classForm.grade = '';
+  classForm.major = '';
+}
+
+function resetExperimentForm(options: { keepCourseId: string; keepRubricTemplateId: string }) {
+  experimentForm.courseId = options.keepCourseId;
+  experimentForm.rubricTemplateId = options.keepRubricTemplateId;
+  experimentForm.title = '';
+  experimentForm.requirementText = '';
+  experimentForm.dueAt = '';
 }
 
 async function withBusy(action: () => Promise<void>) {

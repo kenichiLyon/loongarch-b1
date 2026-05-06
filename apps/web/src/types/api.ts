@@ -45,6 +45,29 @@ export interface Experiment {
   updatedAt: string;
 }
 
+export interface RubricMetricDefinition {
+  id?: string;
+  name: string;
+  description: string;
+  weight: string | number;
+  maxScore: string | number;
+  scoringRule?: string;
+  allowTeacherOverride?: boolean;
+  sortOrder?: number;
+}
+
+export interface RubricTemplate {
+  id: string;
+  courseId: string;
+  name: string;
+  version: number;
+  description: string | null;
+  isActive: boolean;
+  createdBy: string | null;
+  createdAt: string;
+  metrics: RubricMetricDefinition[];
+}
+
 export interface Submission {
   id: string;
   experimentId: string;
