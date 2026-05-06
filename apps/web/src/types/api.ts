@@ -7,6 +7,20 @@ export interface AuthenticatedUser {
   role: UserRole;
 }
 
+export interface UserSummary {
+  id: string;
+  role: UserRole;
+  username: string;
+  displayName: string;
+  email?: string | null;
+  phone?: string | null;
+  studentNo?: string | null;
+  teacherNo?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuthSession {
   user: AuthenticatedUser;
   accessToken: string;
@@ -66,6 +80,18 @@ export interface RubricTemplate {
   createdBy: string | null;
   createdAt: string;
   metrics: RubricMetricDefinition[];
+}
+
+export interface Enrollment {
+  id: string;
+  studentId: string;
+  courseId: string;
+  classId: string;
+  studentUsername: string;
+  studentDisplayName: string;
+  courseName: string;
+  className: string;
+  createdAt: string;
 }
 
 export interface Submission {

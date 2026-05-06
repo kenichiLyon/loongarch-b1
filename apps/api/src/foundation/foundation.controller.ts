@@ -5,11 +5,13 @@ import { RolesGuard } from '../auth/roles.guard';
 import { UserRole } from '../domain/core';
 import {
   AttachCourseClassDto,
+  CreateEnrollmentDto,
   CreateClassDto,
   CreateCourseDto,
   CreateExperimentDto,
   CreateRubricDto,
   CreateUserDto,
+  ListEnrollmentsQueryDto,
 } from './foundation.dto';
 import { FoundationService } from './foundation.service';
 
@@ -30,7 +32,7 @@ export class FoundationController {
     return this.foundationService.createUser(dto);
   }
 
-  @Roles(UserRole.Admin, UserRole.Teacher)
+  @Roles(UserRole.Admin, UserRole.Teacher, UserRole.Student)
   @Get('classes')
   listClasses() {
     return this.foundationService.listClasses();
@@ -42,7 +44,7 @@ export class FoundationController {
     return this.foundationService.createClass(dto);
   }
 
-  @Roles(UserRole.Admin, UserRole.Teacher)
+  @Roles(UserRole.Admin, UserRole.Teacher, UserRole.Student)
   @Get('courses')
   listCourses() {
     return this.foundationService.listCourses();
@@ -61,6 +63,18 @@ export class FoundationController {
   }
 
   @Roles(UserRole.Admin, UserRole.Teacher)
+  @Get('enrollments')
+  listEnrollments(@Query() query: ListEnrollmentsQueryDto) {
+    return this.foundationService.listEnrollments(query);
+  }
+
+  @Roles(UserRole.Admin, UserRole.Teacher)
+  @Post('enrollments')
+  createEnrollment(@Body() dto: CreateEnrollmentDto) {
+    return this.foundationService.createEnrollment(dto);
+  }
+
+  @Roles(UserRole.Admin, UserRole.Teacher)
   @Get('rubrics')
   listRubrics(@Query('courseId') courseId?: string) {
     return this.foundationService.listRubrics(courseId);
@@ -72,7 +86,7 @@ export class FoundationController {
     return this.foundationService.createRubric(dto);
   }
 
-  @Roles(UserRole.Admin, UserRole.Teacher)
+  @Roles(UserRole.Admin, UserRole.Teacher, UserRole.Student)
   @Get('experiments')
   listExperiments(@Query('courseId') courseId?: string) {
     return this.foundationService.listExperiments(courseId);

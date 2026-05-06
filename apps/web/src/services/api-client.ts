@@ -4,6 +4,7 @@ import type {
   AuthSession,
   ClassGroup,
   Course,
+  Enrollment,
   Evaluation,
   Experiment,
   Job,
@@ -13,6 +14,7 @@ import type {
   RubricTemplate,
   Submission,
   UploadedArtifact,
+  UserSummary,
 } from '../types/api';
 
 const tokenStorageKey = 'loongarch-b1.access-token';
@@ -40,6 +42,8 @@ export interface DashboardSnapshot {
   classes: ClassGroup[];
   experiments: Experiment[];
   rubrics: RubricTemplate[];
+  users: UserSummary[];
+  enrollments: Enrollment[];
 }
 
 export function getDefaultApiBaseUrl() {
@@ -89,13 +93,33 @@ export class ApiClient {
     return response.user;
   }
 
-  async listSubmissions(limit = 20) {
-    const submissions = await this.request<Submission[]>('/submissions');
+  async listSubmissions(filters: {
+    experimentId?: string;
+    studentId?: string;
+    courseId?: string;
+    classId?: string;
+    status?: string;
+    limit?: number;
+  } = {}) {
+    const limit = filters.limit ?? 20;
+    const query = buildQueryString({
+      experimentId: filters.experimentId,
+      studentId: filters.studentId,
+      courseId: filters.courseId,
+      classId: filters.classId,
+      status: filters.status,
+    });
+    const submissions = await this.request<Submission[]>(`/submissions${query}`);
     return submissions.slice(0, limit);
   }
 
   async listCourses() {
     return this.request<Course[]>('/courses');
+  }
+
+  async listUsers(role = '') {
+    const query = role ? `?${new URLSearchParams({ role })}` : '';
+    return this.request<UserSummary[]>(`/users${query}`);
   }
 
   async listClasses() {
@@ -110,6 +134,11 @@ export class ApiClient {
   async listRubrics(courseId = '') {
     const query = courseId ? `?${new URLSearchParams({ courseId })}` : '';
     return this.request<RubricTemplate[]>(`/rubrics${query}`);
+  }
+
+  async listEnrollments(filters: { courseId?: string; classId?: string; studentId?: string } = {}) {
+    const query = buildQueryString(filters);
+    return this.request<Enrollment[]>(`/enrollments${query}`);
   }
 
   async createCourse(payload: { name: string; code: string; description?: string }) {
@@ -130,6 +159,30 @@ export class ApiClient {
     return this.request<{ courseId: string; classId: string; attached: boolean }>(`/courses/${encodeURIComponent(courseId)}/classes`, {
       method: 'POST',
       body: { classId },
+    });
+  }
+
+  async createUser(payload: {
+    role: 'admin' | 'teacher' | 'student';
+    username: string;
+    displayName: string;
+    initialPassword: string;
+    email?: string;
+    phone?: string;
+    studentNo?: string;
+    teacherNo?: string;
+    isActive?: boolean;
+  }) {
+    return this.request<UserSummary>('/users', {
+      method: 'POST',
+      body: payload,
+    });
+  }
+
+  async createEnrollment(payload: { studentId: string; courseId: string; classId: string }) {
+    return this.request<Enrollment>('/enrollments', {
+      method: 'POST',
+      body: payload,
     });
   }
 
@@ -242,8 +295,8 @@ export class ApiClient {
   }
 
   async loadDashboardSnapshot(selectedSubmissionId = ''): Promise<DashboardSnapshot> {
-    const [me, submissions, jobs, auditLogs, statistics, exports, courses, classes, experiments, rubrics] = await Promise.all([
-      this.me(),
+    const me = await this.me();
+    const [submissions, jobs, auditLogs, statistics, exports, courses, classes, experiments, rubrics, users, enrollments] = await Promise.all([
       this.listSubmissions(),
       this.listJobs(),
       this.listAuditLogs(),
@@ -252,7 +305,9 @@ export class ApiClient {
       this.listCourses(),
       this.listClasses(),
       this.listExperiments(),
-      this.listRubrics(),
+      me.role === 'student' ? Promise.resolve([] as RubricTemplate[]) : this.listRubrics(),
+      me.role === 'admin' || me.role === 'teacher' ? this.listUsers() : Promise.resolve([] as UserSummary[]),
+      me.role === 'admin' || me.role === 'teacher' ? this.listEnrollments() : Promise.resolve([] as Enrollment[]),
     ]);
     const targetSubmissionId = selectedSubmissionId || submissions[0]?.id || '';
     const evaluation = targetSubmissionId ? await this.loadEvaluationForRole(targetSubmissionId, me.role) : null;
@@ -269,6 +324,8 @@ export class ApiClient {
       classes,
       experiments,
       rubrics,
+      users,
+      enrollments,
     };
   }
 
