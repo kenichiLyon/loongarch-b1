@@ -30,6 +30,7 @@
 | 指标得分 | `metric_scores` | 每个指标的确定性规则分、AI 分、教师分、最终分 |
 | 核查发现 | `verification_findings` | 步骤缺失、逻辑风险、文档/代码问题 |
 | LLM 调用 | `llm_call_logs` | 模型、输入 hash、输出、耗时、错误 |
+| 上下文快照 | `evaluation_context_snapshots` | 评价前的脱敏上下文包、文本摘要、版本和输入 hash |
 | 报表导出 | `report_exports` | Excel/PDF 导出任务和文件位置 |
 | 审计日志 | `audit_logs` | 关键操作留痕 |
 | 后台任务 | `jobs` | 解析、评价、导出等异步任务 |
@@ -51,6 +52,7 @@
 - 一个学生对同一实训任务允许多次提交，但只能有一个当前有效提交。
 - 一个提交包含多个成果文件，一个成果文件可以产生多个解析片段。
 - 一个提交最多有一个当前评价结果；评价结果包含多条指标得分和核查发现，规则分与 AI 草稿可被重新生成但最终教师分不能被后台覆盖。
+- 一个提交可以保留多条上下文快照，用于复现某次评价前给模型的脱敏上下文输入；新的快照会把旧快照标记为 `superseded`。
 - 教师复核会写入 `metric_scores.teacher_score`、`metric_scores.final_score`、`evaluation_results.final_score`、`confirmed_by` 和 `confirmed_at`；发布时写入 `published_at` 并把提交状态置为 `published`。
 - 报表导出记录操作者、筛选条件、生成状态和对象存储 key。
 - 报表导出只读取 `published` 评价结果；`report_exports.filter_json` 保存课程、班级、实训任务或学生筛选条件，`storage_key` 和 `file_sha256` 指向导出文件。
@@ -68,8 +70,9 @@
 - 教师/管理员按任务类型、任务状态、提交 ID 或成果 ID 排查异步任务。
 - 教师/管理员按动作、实体或操作者筛选审计日志，定位上传与解析链路问题。
 - 教师查看单个提交的 AI 初评草稿、指标分、置信度、核查发现和 LLM 调用留痕。
+- 教师/管理员查看某个提交的最新上下文快照和历史上下文快照，复现模型输入。
 - 学生只能读取本人 `published` 状态的评价反馈，不能读取未发布 AI 草稿或其他学生结果。
 
 ## 6. 迁移脚本
 
-初版 SQL 位于 `apps/api/migrations/001_initial_schema.sql`。并发任务索引位于 `apps/api/migrations/002_job_queue_concurrency.sql`。审计与任务状态查询索引位于 `apps/api/migrations/003_audit_and_job_status_indexes.sql`。评价 worker、LLM 调用和核查发现查询索引位于 `apps/api/migrations/004_evaluation_worker_indexes.sql`。迁移脚本只定义数据库结构，不写入演示数据；演示数据后续放在 `fixtures/demo-data`。
+初版 SQL 位于 `apps/api/migrations/001_initial_schema.sql`。并发任务索引位于 `apps/api/migrations/002_job_queue_concurrency.sql`。审计与任务状态查询索引位于 `apps/api/migrations/003_audit_and_job_status_indexes.sql`。评价 worker、LLM 调用和核查发现查询索引位于 `apps/api/migrations/004_evaluation_worker_indexes.sql`。上下文快照位于 `apps/api/migrations/005_evaluation_context_snapshots.sql`。迁移脚本只定义数据库结构，不写入演示数据；演示数据后续放在 `fixtures/demo-data`。

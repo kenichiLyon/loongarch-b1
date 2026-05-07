@@ -108,6 +108,7 @@ JOB_RETRY_DELAY_SECONDS=30
 JOB_STALE_AFTER_SECONDS=900
 EVALUATION_MAX_CONTEXT_CHARS=24000
 EVALUATION_PROMPT_VERSION=evaluation-v1
+EVALUATION_CONTEXT_VERSION=evaluation-context-v1
 LLM_PROVIDER=cloud
 LLM_BASE_URL=https://example.invalid/v1
 LLM_API_KEY=
@@ -214,6 +215,8 @@ OCR、旧版 `.doc`、复杂或加密 PDF、深度代码语义分析仍保留为
 - `GET /jobs`、`GET /jobs/:jobId`：管理员/教师查看解析、评价、报表异步任务状态
 - `GET /audit-logs`：管理员/教师按动作、实体、操作者筛选审计日志
 - `GET /evaluations/submissions/:submissionId`：管理员/教师查看 AI 初评草稿、指标分和核查发现
+- `GET /evaluations/submissions/:submissionId/context-latest`：管理员/教师查看最新脱敏上下文快照
+- `GET /evaluations/submissions/:submissionId/context-history`：管理员/教师查看上下文快照历史
 - `PATCH /evaluations/submissions/:submissionId/review`：管理员/教师逐项填写教师分、评语并确认最终分
 - `POST /evaluations/submissions/:submissionId/publish`：管理员/教师发布已复核评价结果
 - `GET /evaluations/submissions/:submissionId/published`：学生查看自己已发布的反馈，管理员/教师也可查看
@@ -349,8 +352,10 @@ pnpm risk:loongarch
 - 上传/解析审计日志、教师/管理员任务状态查询 API 和相关索引。
 - CI 已纳入仓库脚本测试，保证 LoongArch 风险扫描逻辑随 PR 自动验证。
 - OpenAI-compatible LLM Gateway、脱敏证据摘要、JSON 初评校验、评价 worker 和 AI 草稿落库。
+- 评分链路上下文工程基础能力：脱敏上下文快照、上下文版本、快照历史、输入 hash 关联和教师只读查看接口。
 - 确定性规则核查基础能力：需求覆盖、步骤完整性、文档证据质量、异常/Prompt Injection 风险识别和指标 `rule_score` 落库。
 - 解析增强基础能力：`docx/pdf/zip/tar/tgz/gz/image metadata` 的确定性提取与可降级回退。
+- 可选 OCR 基础能力：配置 `OCR_TESSERACT_BIN` 后可为截图额外生成 `ocr` 证据，未配置时安全降级。
 - 教师复核 API：逐项教师分、总评语、最终分确认、发布和学生已发布反馈查看。
 - 报表统计与导出基础能力：已发布成绩统计、常见问题统计、`export_report` worker、最小 `.xlsx`/`.pdf` 生成和对象存储落盘。
 - 报表下载基础能力：后端提供 RBAC 保护的导出下载接口，前端可下载已成功生成的 Excel/PDF。
@@ -362,6 +367,6 @@ pnpm risk:loongarch
 
 下一步：
 
-1. 扩展 OCR、旧版 `.doc`、复杂 PDF、远端仓库内容探测和更深的代码语义解析能力，并补更多解析回归样例。
+1. 扩展旧版 `.doc`、复杂 PDF、远端仓库内容探测和更深的代码语义解析能力，并补更多解析回归样例。
 2. 补齐更独立的学生/教师页面导航、教师端任务看板细分视图和 enrollment 批量导入能力。
 3. 增强报表图表、PDF 中文字体嵌入、导出下载体验和权限测试。
