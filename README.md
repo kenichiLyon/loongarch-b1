@@ -178,6 +178,7 @@ JOB_RUN_ONCE=true pnpm worker:export
 - PDF：基础文本流提取
 - 代码包：`zip/tar/tgz/gz` 文件结构摘要
 - 图片：尺寸等元数据提取
+- 图片 OCR：可选接入系统 `tesseract`，配置 `OCR_TESSERACT_BIN` 后启用
 
 OCR、旧版 `.doc`、复杂或加密 PDF、深度代码语义分析仍保留为后续增强项。
 
