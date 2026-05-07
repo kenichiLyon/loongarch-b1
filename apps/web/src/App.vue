@@ -353,6 +353,44 @@
                   </button>
                 </div>
               </div>
+              <section v-if="canInspectContext" class="context-panel">
+                <div class="card-header">
+                  <div>
+                    <span class="panel-kicker">Context Snapshot</span>
+                    <h3>评分上下文快照</h3>
+                  </div>
+                  <button class="ghost-button" :disabled="isBusy || !selectedSubmissionId" type="button" @click="loadContextSnapshotsForSelection">
+                    刷新快照
+                  </button>
+                </div>
+                <div v-if="currentContextSnapshot" class="context-layout">
+                  <div class="context-meta">
+                    <span>版本 {{ currentContextSnapshot.contextVersion }}</span>
+                    <strong>{{ currentContextSnapshot.status }}</strong>
+                    <small>{{ currentContextSnapshot.promptVersion }} · {{ formatDate(currentContextSnapshot.createdAt) }}</small>
+                    <small>
+                      {{ currentContextSnapshot.redactedCharCount }}/{{ currentContextSnapshot.originalCharCount }}
+                      · {{ currentContextSnapshot.truncated ? '已截断' : '未截断' }}
+                    </small>
+                    <small>{{ currentContextSnapshot.inputHash.slice(0, 16) }}</small>
+                  </div>
+                  <pre class="context-text">{{ currentContextSnapshot.contextText }}</pre>
+                  <ul v-if="contextHistory.length > 0" class="context-history">
+                    <li v-for="snapshot in contextHistory" :key="snapshot.id">
+                      <button
+                        :class="{ 'is-active': snapshot.id === currentContextSnapshot.id }"
+                        type="button"
+                        @click="selectContextSnapshot(snapshot.id)"
+                      >
+                        <span>{{ snapshot.status }}</span>
+                        <strong>{{ snapshot.contextVersion }}</strong>
+                        <small>{{ formatDate(snapshot.createdAt) }}</small>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+                <div v-else class="empty-state">当前提交还没有生成上下文快照；完成解析并进入评价链路后会在这里显示。</div>
+              </section>
             </template>
             <div v-else class="empty-state">选择一份提交后查看 AI/规则初评和教师复核入口。</div>
           </div>
@@ -553,6 +591,7 @@ import type {
   Course,
   Enrollment,
   Evaluation,
+  EvaluationContextSnapshot,
   Experiment,
   Job,
   MetricScore,
@@ -596,6 +635,8 @@ const selectedSubmissionStatus = ref('');
 const teacherComment = ref('');
 const metricReviewDraft = reactive<Record<string, { teacherScore: string; comment: string }>>({});
 const publishedFeedback = ref<Evaluation | null>(null);
+const currentContextSnapshot = ref<EvaluationContextSnapshot | null>(null);
+const contextHistory = ref<EvaluationContextSnapshot[]>([]);
 const courseForm = reactive({
   name: '',
   code: '',
@@ -695,6 +736,7 @@ const defaultRubricMetrics = [
 
 const canManageFoundation = computed(() => sessionUser.value?.role === 'admin' || sessionUser.value?.role === 'teacher');
 const canManageUsers = computed(() => sessionUser.value?.role === 'admin');
+const canInspectContext = computed(() => sessionUser.value?.role === 'admin' || sessionUser.value?.role === 'teacher');
 const canSubmitArtifact = computed(() => {
   if (uploadForm.kind === 'git_link') {
     return gitLinkForm.url.trim().length > 0;
@@ -793,6 +835,12 @@ async function refreshDashboard() {
     teacherComment.value = snapshot.evaluation?.teacherComment ?? '';
     resetMetricReviewDraft(snapshot.evaluation?.metricScores ?? []);
     publishedFeedback.value = null;
+    if (canInspectContext.value && selectedSubmissionId.value) {
+      await loadContextSnapshots(selectedSubmissionId.value);
+    } else {
+      currentContextSnapshot.value = null;
+      contextHistory.value = [];
+    }
     if (selectedCourseId.value || selectedClassId.value || selectedExperimentId.value || selectedStudentId.value || selectedSubmissionStatus.value) {
       await applyDashboardFilters(false);
     }
@@ -1000,6 +1048,12 @@ async function selectSubmission(submissionId: string) {
     teacherComment.value = evaluation.value?.teacherComment ?? '';
     resetMetricReviewDraft(evaluation.value?.metricScores ?? []);
     publishedFeedback.value = null;
+    if (canInspectContext.value) {
+      await loadContextSnapshots(submissionId);
+    } else {
+      currentContextSnapshot.value = null;
+      contextHistory.value = [];
+    }
   });
 }
 
@@ -1095,6 +1149,24 @@ async function loadPublishedFeedback() {
     publishedFeedback.value = await apiClient.getPublishedEvaluation(selectedSubmissionId.value);
     viewMessage.value = '已读取发布反馈。';
   });
+}
+
+async function loadContextSnapshotsForSelection() {
+  if (!selectedSubmissionId.value || !canInspectContext.value) {
+    return;
+  }
+  await withBusy(async () => {
+    await loadContextSnapshots(selectedSubmissionId.value);
+    viewMessage.value = '上下文快照已刷新。';
+  });
+}
+
+async function selectContextSnapshot(snapshotId: string) {
+  const snapshot = contextHistory.value.find((item) => item.id === snapshotId);
+  if (!snapshot) {
+    return;
+  }
+  currentContextSnapshot.value = snapshot;
 }
 
 async function downloadExport(item: ReportExport) {
@@ -1220,6 +1292,12 @@ async function syncSelectionAfterSubmissionRefresh() {
   evaluation.value = selectedSubmissionId.value ? await loadEvaluationForCurrentRole(selectedSubmissionId.value) : null;
   teacherComment.value = evaluation.value?.teacherComment ?? '';
   resetMetricReviewDraft(evaluation.value?.metricScores ?? []);
+  if (canInspectContext.value && selectedSubmissionId.value) {
+    await loadContextSnapshots(selectedSubmissionId.value);
+  } else {
+    currentContextSnapshot.value = null;
+    contextHistory.value = [];
+  }
 }
 
 async function loadEvaluationForCurrentRole(submissionId: string) {
@@ -1234,6 +1312,24 @@ async function loadEvaluationForCurrentRole(submissionId: string) {
     }
   }
   return apiClient.getEvaluation(submissionId);
+}
+
+async function loadContextSnapshots(submissionId: string) {
+  try {
+    const [latest, history] = await Promise.all([
+      apiClient.getLatestEvaluationContext(submissionId),
+      apiClient.getEvaluationContextHistory(submissionId),
+    ]);
+    currentContextSnapshot.value = latest;
+    contextHistory.value = history;
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 404) {
+      currentContextSnapshot.value = null;
+      contextHistory.value = [];
+      return;
+    }
+    throw error;
+  }
 }
 
 async function withBusy(action: () => Promise<void>) {

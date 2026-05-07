@@ -192,6 +192,22 @@ export interface Evaluation {
   findings: VerificationFinding[];
 }
 
+export interface EvaluationContextSnapshot {
+  id: string;
+  submissionId: string;
+  status: 'built' | 'used_for_llm' | 'superseded' | string;
+  promptVersion: string;
+  contextVersion: string;
+  inputHash: string;
+  contextJson: Record<string, unknown>;
+  contextText: string;
+  originalCharCount: number;
+  redactedCharCount: number;
+  truncated: boolean;
+  sourceCounts: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface ReportStatistics {
   generatedAt: string;
   filters: Record<string, string>;
