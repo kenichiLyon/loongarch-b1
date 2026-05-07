@@ -6,6 +6,7 @@ import { AuditService } from '../audit/audit.service';
 import type { DatabaseService } from '../database/database.service';
 import { UserRole } from '../domain/core';
 import type { LlmGatewayService } from '../llm/llm-gateway.service';
+import { EvaluationContextBuilderService } from './evaluation-context-builder.service';
 import { EvaluationService } from './evaluation.service';
 
 const submissionId = '00000000-0000-0000-0000-000000000001';
@@ -156,7 +157,7 @@ function buildService(state: ReturnType<typeof buildReviewState>) {
     withTransaction: async <T>(handler: (poolClient: PoolClient) => Promise<T>) => handler(client),
   } as unknown as DatabaseService;
   const llmGateway = {} as unknown as LlmGatewayService;
-  return new EvaluationService(database, llmGateway, new AuditService(database));
+  return new EvaluationService(database, llmGateway, new AuditService(database), new EvaluationContextBuilderService());
 }
 
 async function handleQuery(sql: string, params: readonly unknown[], state: ReturnType<typeof buildReviewState>) {

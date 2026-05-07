@@ -6,7 +6,13 @@ import { DatabaseService } from '../database/database.service';
 import { UserRole } from '../domain/core';
 import { buildLlmInputHash, LlmGatewayService, type LlmJsonResponse } from '../llm/llm-gateway.service';
 import type { ReviewSubmissionDto } from './evaluation.dto';
-import { buildEvaluationPrompt } from './evaluation-prompt';
+import {
+  EvaluationContextBuilderService,
+  type EvaluationContextArtifact,
+  type EvaluationContextEvidence,
+  type EvaluationContextMetric,
+} from './evaluation-context-builder.service';
+import { buildEvaluationPrompt, resolveEvaluationPromptVersion } from './evaluation-prompt';
 import {
   buildSkippedEvaluationDraft,
   validateEvaluationDraft,
@@ -40,6 +46,8 @@ interface ExtractedContentRow extends QueryResultRow {
   contentKind: string;
   contentText: string;
 }
+
+interface ArtifactContextRow extends QueryResultRow, EvaluationContextArtifact {}
 
 interface EvaluationResultRow extends QueryResultRow {
   id: string;
@@ -102,10 +110,27 @@ interface SubmissionAccessRow extends QueryResultRow {
   status: string;
 }
 
+interface EvaluationContextSnapshotRow extends QueryResultRow {
+  id: string;
+  submissionId: string;
+  status: 'built' | 'used_for_llm' | 'superseded';
+  promptVersion: string;
+  contextVersion: string;
+  inputHash: string;
+  contextJson: Record<string, unknown>;
+  contextText: string;
+  originalCharCount: number;
+  redactedCharCount: number;
+  truncated: boolean;
+  sourceCounts: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface SubmissionEvaluationContext {
   submission: SubmissionEvaluationContextRow;
-  metrics: RubricMetricRow[];
-  evidence: ExtractedContentRow[];
+  metrics: EvaluationContextMetric[];
+  artifacts: ArtifactContextRow[];
+  evidence: EvaluationContextEvidence[];
 }
 
 @Injectable()
@@ -114,6 +139,7 @@ export class EvaluationService {
     private readonly database: DatabaseService,
     private readonly llmGateway: LlmGatewayService,
     private readonly auditService: AuditService,
+    private readonly contextBuilder: EvaluationContextBuilderService,
   ) {}
 
   async evaluateSubmission(submissionId: string) {
@@ -123,11 +149,48 @@ export class EvaluationService {
       metrics: context.metrics,
       evidence: context.evidence,
     });
-    const prompt = buildEvaluationPrompt({
-      experimentTitle: context.submission.experimentTitle,
-      requirementText: context.submission.requirementText,
-      metrics: context.metrics,
+    const promptVersion = resolveEvaluationPromptVersion();
+    const contextSnapshotDraft = this.contextBuilder.build({
+      submission: {
+        submissionId: context.submission.submissionId,
+        studentId: context.submission.studentId,
+        status: context.submission.status,
+      },
+      experiment: {
+        title: context.submission.experimentTitle,
+        requirementText: context.submission.requirementText,
+      },
+      rubric: {
+        templateId: context.submission.rubricTemplateId,
+        name: context.submission.rubricName,
+        metrics: context.metrics,
+      },
+      artifacts: context.artifacts,
       evidence: context.evidence,
+      ruleCheck,
+      promptVersion,
+    });
+    const prompt = buildEvaluationPrompt({
+      promptVersion,
+      contextVersion: contextSnapshotDraft.contextVersion,
+      contextJson: contextSnapshotDraft.contextJson,
+      contextText: contextSnapshotDraft.contextText,
+      originalCharCount: contextSnapshotDraft.originalCharCount,
+      redactedCharCount: contextSnapshotDraft.redactedCharCount,
+      truncated: contextSnapshotDraft.truncated,
+    });
+    const inputHash = buildLlmInputHash(prompt.systemPrompt, prompt.userPrompt);
+    const contextSnapshot = await this.createContextSnapshot({
+      submissionId: context.submission.submissionId,
+      promptVersion,
+      contextVersion: contextSnapshotDraft.contextVersion,
+      inputHash,
+      contextJson: contextSnapshotDraft.contextJson,
+      contextText: contextSnapshotDraft.contextText,
+      originalCharCount: contextSnapshotDraft.originalCharCount,
+      redactedCharCount: contextSnapshotDraft.redactedCharCount,
+      truncated: contextSnapshotDraft.truncated,
+      sourceCounts: contextSnapshotDraft.sourceCounts,
     });
 
     if (!this.llmGateway.isConfigured()) {
@@ -136,15 +199,14 @@ export class EvaluationService {
       await this.persistEvaluationDraft({
         context,
         draft,
-        promptVersion: prompt.promptVersion,
+        promptVersion,
         llmResponse: null,
         ruleCheck,
         skippedReason: reason,
+        contextSnapshotId: contextSnapshot.id,
       });
       return { submissionId, status: 'skipped', reason };
     }
-
-    const inputHash = buildLlmInputHash(prompt.systemPrompt, prompt.userPrompt);
     let llmResponse: LlmJsonResponse;
     try {
       llmResponse = await this.llmGateway.requestJson({
@@ -152,7 +214,7 @@ export class EvaluationService {
         userPrompt: prompt.userPrompt,
       });
     } catch (error) {
-      await this.recordLlmFailure(context.submission.submissionId, prompt.promptVersion, inputHash, error);
+      await this.recordLlmFailure(context.submission.submissionId, promptVersion, inputHash, error, contextSnapshot.id);
       throw error;
     }
 
@@ -160,16 +222,17 @@ export class EvaluationService {
     try {
       draft = validateEvaluationDraft(llmResponse.parsedJson, context.metrics);
     } catch (error) {
-      await this.recordLlmFailure(context.submission.submissionId, prompt.promptVersion, inputHash, error, llmResponse);
+      await this.recordLlmFailure(context.submission.submissionId, promptVersion, inputHash, error, contextSnapshot.id, llmResponse);
       throw error;
     }
 
     await this.persistEvaluationDraft({
       context,
       draft,
-      promptVersion: prompt.promptVersion,
+      promptVersion,
       llmResponse,
       ruleCheck,
+      contextSnapshotId: contextSnapshot.id,
     });
     return {
       submissionId,
@@ -245,6 +308,33 @@ export class EvaluationService {
     }
 
     return this.getEvaluation(submissionId);
+  }
+
+  async getLatestContextSnapshot(submissionId: string) {
+    await this.ensureSubmissionExists(submissionId);
+    const result = await this.database.query<EvaluationContextSnapshotRow>(
+      `${selectContextSnapshotColumnsSql()}
+        WHERE submission_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [submissionId],
+    );
+    const snapshot = result.rows[0];
+    if (!snapshot) {
+      throw new NotFoundException('Evaluation context snapshot not found');
+    }
+    return snapshot;
+  }
+
+  async getContextSnapshotHistory(submissionId: string) {
+    await this.ensureSubmissionExists(submissionId);
+    const result = await this.database.query<EvaluationContextSnapshotRow>(
+      `${selectContextSnapshotColumnsSql()}
+        WHERE submission_id = $1
+        ORDER BY created_at DESC`,
+      [submissionId],
+    );
+    return result.rows;
   }
 
   async reviewSubmission(submissionId: string, dto: ReviewSubmissionDto, reviewer: AuthenticatedUser): Promise<unknown> {
@@ -412,9 +502,19 @@ export class EvaluationService {
       throw new Error('Submission has no extracted evidence for evaluation');
     }
 
+    const artifacts = await this.database.query<ArtifactContextRow>(
+      `SELECT id, kind, original_name AS "originalName", mime_type AS "mimeType",
+              size_bytes AS "sizeBytes", sha256, storage_key AS "storageKey", status
+         FROM artifacts
+        WHERE submission_id = $1
+        ORDER BY created_at ASC`,
+      [submissionId],
+    );
+
     return {
       submission: row,
       metrics: metrics.rows,
+      artifacts: artifacts.rows,
       evidence: evidence.rows,
     };
   }
@@ -435,6 +535,50 @@ export class EvaluationService {
     return submission;
   }
 
+  private async createContextSnapshot(input: {
+    submissionId: string;
+    promptVersion: string;
+    contextVersion: string;
+    inputHash: string;
+    contextJson: Record<string, unknown>;
+    contextText: string;
+    originalCharCount: number;
+    redactedCharCount: number;
+    truncated: boolean;
+    sourceCounts: Record<string, unknown>;
+  }) {
+    return this.database.withTransaction(async (client) => {
+      await client.query(
+        `UPDATE evaluation_context_snapshots
+            SET status = 'superseded'
+          WHERE submission_id = $1
+            AND status <> 'superseded'`,
+        [input.submissionId],
+      );
+      const result = await client.query<EvaluationContextSnapshotRow>(
+        `INSERT INTO evaluation_context_snapshots (
+            submission_id, status, prompt_version, context_version, input_hash, context_json,
+            context_text, original_char_count, redacted_char_count, truncated, source_counts
+         )
+         VALUES ($1, 'built', $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10::jsonb)
+         RETURNING ${selectContextSnapshotColumns()}`,
+        [
+          input.submissionId,
+          input.promptVersion,
+          input.contextVersion,
+          input.inputHash,
+          JSON.stringify(input.contextJson),
+          input.contextText,
+          input.originalCharCount,
+          input.redactedCharCount,
+          input.truncated,
+          JSON.stringify(input.sourceCounts),
+        ],
+      );
+      return result.rows[0];
+    });
+  }
+
   private async persistEvaluationDraft(input: {
     context: SubmissionEvaluationContext;
     draft: EvaluationDraft;
@@ -442,6 +586,7 @@ export class EvaluationService {
     llmResponse: LlmJsonResponse | null;
     ruleCheck: RuleCheckResult;
     skippedReason?: string;
+    contextSnapshotId: string;
   }) {
     await this.database.withTransaction(async (client) => {
       const evaluation = await upsertEvaluationResult(client, input.context.submission.submissionId, input.draft);
@@ -482,10 +627,17 @@ export class EvaluationService {
           modelName: input.llmResponse.modelName,
           promptVersion: input.promptVersion,
           inputHash: input.llmResponse.inputHash,
+          contextSnapshotId: input.contextSnapshotId,
           outputJson: input.llmResponse.parsedJson,
           status: 'succeeded',
           latencyMs: input.llmResponse.latencyMs,
         });
+        await client.query(
+          `UPDATE evaluation_context_snapshots
+              SET status = 'used_for_llm'
+            WHERE id = $1`,
+          [input.contextSnapshotId],
+        );
       }
 
       await client.query(
@@ -501,6 +653,7 @@ export class EvaluationService {
         entityId: input.context.submission.submissionId,
         detail: {
           promptVersion: input.promptVersion,
+          contextSnapshotId: input.contextSnapshotId,
           provider: input.llmResponse?.provider ?? null,
           modelName: input.llmResponse?.modelName ?? null,
           metricScoreCount: input.context.metrics.length,
@@ -518,23 +671,33 @@ export class EvaluationService {
     promptVersion: string,
     inputHash: string,
     error: unknown,
+    contextSnapshotId: string,
     response?: LlmJsonResponse,
   ) {
     const config = this.llmGateway.getConfig();
-    await this.database.query(
-      `INSERT INTO llm_call_logs (submission_id, provider, model_name, prompt_version, input_hash, output_json, status, latency_ms, error_message)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'failed', $7, $8)`,
-      [
-        submissionId,
-        config.provider,
-        (response?.modelName ?? config.modelName) || 'unconfigured',
-        promptVersion,
-        inputHash,
-        response ? JSON.stringify(response.parsedJson) : null,
-        response?.latencyMs ?? null,
-        getErrorMessage(error),
-      ],
-    );
+    await this.database.withTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO llm_call_logs (submission_id, provider, model_name, prompt_version, input_hash, context_snapshot_id, output_json, status, latency_ms, error_message)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, 'failed', $8, $9)`,
+        [
+          submissionId,
+          config.provider,
+          (response?.modelName ?? config.modelName) || 'unconfigured',
+          promptVersion,
+          inputHash,
+          contextSnapshotId,
+          response ? JSON.stringify(response.parsedJson) : null,
+          response?.latencyMs ?? null,
+          getErrorMessage(error),
+        ],
+      );
+      await client.query(
+        `UPDATE evaluation_context_snapshots
+            SET status = 'used_for_llm'
+          WHERE id = $1`,
+        [contextSnapshotId],
+      );
+    });
   }
 }
 
@@ -558,20 +721,22 @@ async function insertLlmCallLog(
     modelName: string;
     promptVersion: string;
     inputHash: string;
+    contextSnapshotId: string;
     outputJson: unknown;
     status: 'succeeded';
     latencyMs: number;
   },
 ) {
   await client.query(
-    `INSERT INTO llm_call_logs (submission_id, provider, model_name, prompt_version, input_hash, output_json, status, latency_ms)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)`,
+    `INSERT INTO llm_call_logs (submission_id, provider, model_name, prompt_version, input_hash, context_snapshot_id, output_json, status, latency_ms)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)`,
     [
       input.submissionId,
       input.provider,
       input.modelName,
       input.promptVersion,
       input.inputHash,
+      input.contextSnapshotId,
       JSON.stringify(input.outputJson),
       input.status,
       input.latencyMs,
@@ -610,6 +775,19 @@ async function loadMetricScoresForReview(client: PoolClient, evaluationResultId:
     [evaluationResultId],
   );
   return result.rows;
+}
+
+function selectContextSnapshotColumnsSql() {
+  return `SELECT ${selectContextSnapshotColumns()}
+            FROM evaluation_context_snapshots`;
+}
+
+function selectContextSnapshotColumns() {
+  return `id, submission_id AS "submissionId", status, prompt_version AS "promptVersion",
+          context_version AS "contextVersion", input_hash AS "inputHash", context_json AS "contextJson",
+          context_text AS "contextText", original_char_count AS "originalCharCount",
+          redacted_char_count AS "redactedCharCount", truncated, source_counts AS "sourceCounts",
+          created_at AS "createdAt"`;
 }
 
 function validateTeacherMetricScores(input: ReviewSubmissionDto['metricScores'], metrics: MetricScoreForReviewRow[]) {

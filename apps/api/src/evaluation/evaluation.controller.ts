@@ -19,6 +19,18 @@ export class EvaluationController {
     return this.evaluationService.getEvaluation(submissionId);
   }
 
+  @Roles(UserRole.Admin, UserRole.Teacher)
+  @Get('submissions/:submissionId/context-latest')
+  getLatestSubmissionContext(@Param('submissionId', new ParseUUIDPipe()) submissionId: string): Promise<unknown> {
+    return this.evaluationService.getLatestContextSnapshot(submissionId);
+  }
+
+  @Roles(UserRole.Admin, UserRole.Teacher)
+  @Get('submissions/:submissionId/context-history')
+  getSubmissionContextHistory(@Param('submissionId', new ParseUUIDPipe()) submissionId: string): Promise<unknown> {
+    return this.evaluationService.getContextSnapshotHistory(submissionId);
+  }
+
   @Roles(UserRole.Admin, UserRole.Teacher, UserRole.Student)
   @Get('submissions/:submissionId/published')
   getPublishedSubmissionEvaluation(
