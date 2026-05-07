@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { deflateRawSync } from 'node:zlib';
 import test from 'node:test';
 import { ArtifactKind } from '../domain/core';
-import { extractArtifactContents } from './artifact-parser';
+import { enrichExtractedContentsWithOptionalOcr, extractArtifactContents } from './artifact-parser';
 
 test('extracts text content from supported text-like artifacts', () => {
   const drafts = extractArtifactContents(
@@ -155,6 +155,115 @@ test('extracts image dimensions from png metadata', () => {
   assert.equal(drafts[1].contentKind, 'metadata');
   assert.equal(drafts[1].metadata.width, 1);
   assert.equal(drafts[1].metadata.height, 2);
+});
+
+test('appends OCR draft when an OCR executor is configured', async () => {
+  const previousBin = process.env.OCR_TESSERACT_BIN;
+  const previousLang = process.env.OCR_LANGUAGE;
+  process.env.OCR_TESSERACT_BIN = 'fake-tesseract';
+  process.env.OCR_LANGUAGE = 'eng';
+
+  try {
+    const png = Buffer.from([
+      137, 80, 78, 71, 13, 10, 26, 10,
+      0, 0, 0, 13,
+      73, 72, 68, 82,
+      0, 0, 0, 1,
+      0, 0, 0, 2,
+      8, 2, 0, 0, 0,
+      0, 0, 0, 0,
+    ]);
+    const baseDrafts = extractArtifactContents(
+      {
+        id: 'artifact-png-ocr',
+        kind: ArtifactKind.Image,
+        originalName: 'screen.png',
+        mimeType: 'image/png',
+        sizeBytes: png.byteLength,
+        sha256: 'hash',
+        storageKey: 'artifacts/demo/screen.png',
+      },
+      png,
+      100,
+    );
+
+    const drafts = await enrichExtractedContentsWithOptionalOcr(
+      {
+        id: 'artifact-png-ocr',
+        kind: ArtifactKind.Image,
+        originalName: 'screen.png',
+        mimeType: 'image/png',
+        sizeBytes: png.byteLength,
+        sha256: 'hash',
+        storageKey: 'artifacts/demo/screen.png',
+      },
+      png,
+      baseDrafts,
+      100,
+      async () => 'menu login success',
+    );
+
+    assert.equal(drafts.length, 3);
+    assert.equal(drafts[2].contentKind, 'ocr');
+    assert.equal(drafts[2].contentText, 'menu login success');
+    assert.equal(drafts[2].metadata.language, 'eng');
+  } finally {
+    process.env.OCR_TESSERACT_BIN = previousBin;
+    process.env.OCR_LANGUAGE = previousLang;
+  }
+});
+
+test('keeps image metadata only when OCR executor fails', async () => {
+  const previousBin = process.env.OCR_TESSERACT_BIN;
+  process.env.OCR_TESSERACT_BIN = 'fake-tesseract';
+
+  try {
+    const png = Buffer.from([
+      137, 80, 78, 71, 13, 10, 26, 10,
+      0, 0, 0, 13,
+      73, 72, 68, 82,
+      0, 0, 0, 1,
+      0, 0, 0, 2,
+      8, 2, 0, 0, 0,
+      0, 0, 0, 0,
+    ]);
+    const baseDrafts = extractArtifactContents(
+      {
+        id: 'artifact-png-ocr-fail',
+        kind: ArtifactKind.Image,
+        originalName: 'screen.png',
+        mimeType: 'image/png',
+        sizeBytes: png.byteLength,
+        sha256: 'hash',
+        storageKey: 'artifacts/demo/screen.png',
+      },
+      png,
+      100,
+    );
+
+    const drafts = await enrichExtractedContentsWithOptionalOcr(
+      {
+        id: 'artifact-png-ocr-fail',
+        kind: ArtifactKind.Image,
+        originalName: 'screen.png',
+        mimeType: 'image/png',
+        sizeBytes: png.byteLength,
+        sha256: 'hash',
+        storageKey: 'artifacts/demo/screen.png',
+      },
+      png,
+      baseDrafts,
+      100,
+      async () => {
+        throw new Error('ocr failed');
+      },
+    );
+
+    assert.equal(drafts.length, 2);
+    assert.equal(drafts[1].contentKind, 'metadata');
+  } finally {
+    process.env.OCR_TESSERACT_BIN = previousBin;
+  }
 });
 
 test('extracts repository metadata from git link payload', () => {

@@ -1,4 +1,7 @@
 import { inflateRawSync, inflateSync, gunzipSync } from 'node:zlib';
+import { spawn } from 'node:child_process';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { ArtifactKind } from '../domain/core';
 
@@ -26,6 +29,14 @@ interface ZipEntry {
   uncompressedSize: number;
   data: Buffer;
 }
+
+export interface OcrExecutionInput {
+  imagePath: string;
+  language: string;
+  timeoutMs: number;
+}
+
+export type OcrExecutor = (input: OcrExecutionInput) => Promise<string>;
 
 const defaultMaxTextChars = 60_000;
 const textExtensions = new Set(['.txt', '.md', '.json', '.csv']);
@@ -106,10 +117,68 @@ export function extractArtifactContents(
   return drafts;
 }
 
+export async function enrichExtractedContentsWithOptionalOcr(
+  artifact: ArtifactForParsing,
+  buffer: Buffer,
+  drafts: ExtractedContentDraft[],
+  maxTextChars = readParserMaxTextChars(),
+  executor: OcrExecutor = runTesseractOcr,
+) {
+  if (artifact.kind !== ArtifactKind.Image) {
+    return drafts;
+  }
+
+  const ocrBin = process.env.OCR_TESSERACT_BIN?.trim();
+  if (!ocrBin) {
+    return drafts;
+  }
+
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'loongarch-b1-ocr-'));
+  const imagePath = path.join(tempDir, buildOcrTempFileName(artifact.originalName));
+  try {
+    await writeFile(imagePath, buffer);
+    const ocrText = normalizeWhitespace(await executor({
+      imagePath,
+      language: process.env.OCR_LANGUAGE?.trim() || 'chi_sim+eng',
+      timeoutMs: readOcrTimeoutMs(),
+    }));
+    if (!ocrText) {
+      return drafts;
+    }
+
+    const ocrDraft: ExtractedContentDraft = {
+      sourceRef: `${artifact.storageKey}#ocr`,
+      contentKind: 'ocr',
+      contentText: truncateText(ocrText, maxTextChars),
+      metadata: {
+        artifactId: artifact.id,
+        storageKey: artifact.storageKey,
+        parser: 'tesseract-ocr-v1',
+        truncated: ocrText.length > maxTextChars,
+        language: process.env.OCR_LANGUAGE?.trim() || 'chi_sim+eng',
+      },
+    };
+
+    return [...drafts, ocrDraft];
+  } catch {
+    return drafts;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 export function readParserMaxTextChars() {
   const configured = Number(process.env.PARSER_MAX_TEXT_CHARS ?? defaultMaxTextChars);
   if (!Number.isFinite(configured) || configured <= 0) {
     throw new Error('PARSER_MAX_TEXT_CHARS must be a positive number');
+  }
+  return Math.floor(configured);
+}
+
+export function readOcrTimeoutMs() {
+  const configured = Number(process.env.OCR_TIMEOUT_MS ?? 15_000);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    throw new Error('OCR_TIMEOUT_MS must be a positive number');
   }
   return Math.floor(configured);
 }
@@ -411,6 +480,12 @@ function inferImageFormat(originalName: string, mimeType: string | null) {
   return 'unknown';
 }
 
+function buildOcrTempFileName(originalName: string) {
+  const extension = path.extname(originalName).toLowerCase() || '.img';
+  const baseName = path.basename(originalName, extension).replace(/[^a-zA-Z0-9._-]/g, '-').slice(0, 48) || 'image';
+  return `${baseName}${extension}`;
+}
+
 function readJpegSize(buffer: Buffer) {
   if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) {
     return null;
@@ -678,4 +753,39 @@ function decodePdfLiteralString(literal: string) {
     .replace(/\\b/g, '\b')
     .replace(/\\f/g, '\f')
     .replace(/\\([0-7]{1,3})/g, (_match, octal: string) => String.fromCharCode(parseInt(octal, 8)));
+}
+
+function runTesseractOcr(input: OcrExecutionInput) {
+  return new Promise<string>((resolve, reject) => {
+    const executable = process.env.OCR_TESSERACT_BIN?.trim();
+    if (!executable) {
+      resolve('');
+      return;
+    }
+
+    const args = [input.imagePath, 'stdout', '-l', input.language];
+    const processHandle = spawn(executable, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => {
+      processHandle.kill('SIGKILL');
+      reject(new Error('OCR command timed out'));
+    }, input.timeoutMs);
+
+    processHandle.stdout.on('data', (chunk) => {
+      stdout += chunk.toString('utf8');
+    });
+    processHandle.stderr.on('data', (chunk) => {
+      stderr += chunk.toString('utf8');
+    });
+    processHandle.on('error', reject);
+    processHandle.on('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) {
+        resolve(stdout);
+      } else {
+        reject(new Error(stderr || `OCR command exited with code ${code}`));
+      }
+    });
+  });
 }

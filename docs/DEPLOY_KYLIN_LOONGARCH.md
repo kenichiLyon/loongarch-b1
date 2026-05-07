@@ -46,6 +46,12 @@ cp .env.example .env
 - `AUTH_BOOTSTRAP_TOKEN`
 - `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY`（如果启用云端模型）
 
+可选增强：
+
+- `OCR_TESSERACT_BIN=/usr/bin/tesseract`
+- `OCR_LANGUAGE=chi_sim+eng`
+- `OCR_TIMEOUT_MS=15000`
+
 如果只想看页面和基础管理功能，未配置 LLM 也能启动；系统会把评价降级到教师复核草稿。
 
 ## 5. 从 Release Artifact 部署
@@ -126,6 +132,9 @@ runtime/pids/
 - `AUTH_BOOTSTRAP_TOKEN`
 - `STORAGE_ROOT`
 - `WEB_DIST_DIR`
+- `OCR_TESSERACT_BIN`
+- `OCR_LANGUAGE`
+- `OCR_TIMEOUT_MS`
 - `PARSE_JOB_BATCH_SIZE`
 - `EVALUATE_JOB_BATCH_SIZE`
 - `EXPORT_JOB_BATCH_SIZE`

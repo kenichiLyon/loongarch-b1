@@ -4,7 +4,12 @@ import { AuditService } from '../audit/audit.service';
 import { DatabaseService } from '../database/database.service';
 import { ArtifactKind } from '../domain/core';
 import { JobQueueService, type JobRow } from '../jobs/job-queue.service';
-import { extractArtifactContents, type ArtifactForParsing, type ExtractedContentDraft } from '../parser/artifact-parser';
+import {
+  enrichExtractedContentsWithOptionalOcr,
+  extractArtifactContents,
+  type ArtifactForParsing,
+  type ExtractedContentDraft,
+} from '../parser/artifact-parser';
 import { LocalObjectStoreService } from '../storage/local-object-store.service';
 
 interface ArtifactRow extends QueryResultRow, ArtifactForParsing {
@@ -64,7 +69,8 @@ export class ParseWorkerService {
     const payload = parseJobPayload(job.payload);
     const artifact = await this.loadArtifact(payload.artifactId);
     const buffer = await this.objectStore.readObject(artifact.storageKey);
-    const drafts = extractArtifactContents(artifact, buffer);
+    const baseDrafts = extractArtifactContents(artifact, buffer);
+    const drafts = await enrichExtractedContentsWithOptionalOcr(artifact, buffer, baseDrafts);
 
     await this.database.withTransaction(async (client) => {
       await client.query(
