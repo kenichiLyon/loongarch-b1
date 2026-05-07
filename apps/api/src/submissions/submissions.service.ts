@@ -7,7 +7,8 @@ import { DatabaseService } from '../database/database.service';
 import { ArtifactKind, UserRole } from '../domain/core';
 import { LocalObjectStoreService } from '../storage/local-object-store.service';
 import { validateArtifactUpload, type UploadFileLike } from './artifact-upload.policy';
-import type { CreateSubmissionDto, ListSubmissionsQueryDto, UploadArtifactDto } from './submissions.dto';
+import { sanitizeFileName } from '../storage/local-object-store.service';
+import type { CreateGitLinkArtifactDto, CreateSubmissionDto, ListSubmissionsQueryDto, UploadArtifactDto } from './submissions.dto';
 
 export interface SubmissionRow extends QueryResultRow {
   id: string;
@@ -122,6 +123,59 @@ export class SubmissionsService {
     }
   }
 
+  async createGitLinkArtifact(submissionId: string, dto: CreateGitLinkArtifactDto, user: AuthenticatedUser) {
+    const submission = await this.getSubmissionForUser(submissionId, user);
+    const payload = buildGitLinkPayload(dto);
+    const stored = await this.objectStore.storeArtifact({
+      submissionId: submission.id,
+      originalName: buildGitLinkArtifactName(payload),
+      buffer: Buffer.from(JSON.stringify(payload), 'utf8'),
+    });
+
+    return this.database.withTransaction(async (client) => {
+      const artifact = await insertArtifact(client, {
+        submissionId: submission.id,
+        kind: ArtifactKind.GitLink,
+        originalName: buildGitLinkArtifactName(payload),
+        mimeType: 'application/json',
+        sizeBytes: stored.sizeBytes,
+        sha256: stored.sha256,
+        storageKey: stored.storageKey,
+      });
+
+      await client.query(
+        `INSERT INTO jobs (job_type, payload)
+         VALUES ('parse_artifact', $1::jsonb)`,
+        [JSON.stringify({ artifactId: artifact.id, submissionId: submission.id })],
+      );
+
+      await client.query(
+        `UPDATE submissions
+            SET status = 'parsing', updated_at = now()
+          WHERE id = $1`,
+        [submission.id],
+      );
+
+      await this.auditService.record({
+        actorId: user.id,
+        action: 'artifact.uploaded',
+        entityType: 'artifact',
+        entityId: artifact.id,
+        detail: {
+          submissionId: submission.id,
+          kind: artifact.kind,
+          gitUrl: payload.url,
+          branch: payload.branch ?? null,
+          commitSha: payload.commitSha ?? null,
+          queuedJobType: 'parse_artifact',
+        },
+        client,
+      });
+
+      return artifact;
+    });
+  }
+
   private async getSubmissionForUser(submissionId: string, user: AuthenticatedUser) {
     const result = await this.database.query<SubmissionRow>(
       `SELECT id, experiment_id AS "experimentId", student_id AS "studentId", status, attempt_no AS "attemptNo",
@@ -141,6 +195,31 @@ export class SubmissionsService {
     }
 
     return submission;
+  }
+}
+
+function buildGitLinkPayload(dto: CreateGitLinkArtifactDto) {
+  return {
+    url: dto.url.trim(),
+    branch: dto.branch?.trim() || undefined,
+    commitSha: dto.commitSha?.trim() || undefined,
+  };
+}
+
+function buildGitLinkArtifactName(payload: { url: string }) {
+  const repoSlug = extractRepoSlug(payload.url);
+  return sanitizeFileName(`${repoSlug || 'git-link'}.gitlink.json`);
+}
+
+function extractRepoSlug(url: string) {
+  try {
+    const parsed = new URL(url);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const repo = segments[1]?.replace(/\.git$/i, '');
+    const owner = segments[0];
+    return owner && repo ? `${owner}-${repo}` : repo || owner || 'git-link';
+  } catch {
+    return 'git-link';
   }
 }
 

@@ -191,7 +191,7 @@ OCR、旧版 `.doc`、复杂或加密 PDF、深度代码语义分析仍保留为
 
 前端已提供第一版 PC Web 工作台，覆盖登录、用户与基础数据维护、课程/班级/实训任务选择、成果提交/上传、提交复核队列、AI/规则初评查看、教师总评保存、结果发布、学生已发布反馈查看、异步任务状态、审计日志、统计概览和 Excel/PDF 导出任务创建。页面会在未连接 API、未登录或暂无数据时显示空态/错误态，便于 amd64 Windows/Linux 开发机与 LoongArch + 银河麒麟目标机分别联调。
 
-当前管理员可在 Web 中创建管理员/教师/学生账号；管理员/教师可在 Web 中创建课程、班级、默认评价模板和实训任务，并完成课程-班级绑定与学生选课分班。教师复核入口已支持逐项教师分、指标评语和总评提交。顶部筛选器已经联动提交列表与报表统计；上传入口支持从顶部实训任务选择器带入任务 ID，也支持手动输入或复用已有提交 ID 上传成果文件。
+当前管理员可在 Web 中创建管理员/教师/学生账号；管理员/教师可在 Web 中创建课程、班级、默认评价模板和实训任务，并完成课程-班级绑定与学生选课分班。教师复核入口已支持逐项教师分、指标评语和总评提交。顶部筛选器已经联动提交列表与报表统计；上传入口支持从顶部实训任务选择器带入任务 ID，也支持手动输入或复用已有提交 ID 上传成果文件，并支持 Git 仓库链接作为独立成果类型提交。
 
 ## 6. 基础 API
 
@@ -209,6 +209,7 @@ OCR、旧版 `.doc`、复杂或加密 PDF、深度代码语义分析仍保留为
 - `GET /experiments`、`POST /experiments`
 - `GET /submissions`、`POST /submissions`
 - `POST /submissions/:submissionId/artifacts/upload`
+- `POST /submissions/:submissionId/artifacts/git-link`
 - `GET /jobs`、`GET /jobs/:jobId`：管理员/教师查看解析、评价、报表异步任务状态
 - `GET /audit-logs`：管理员/教师按动作、实体、操作者筛选审计日志
 - `GET /evaluations/submissions/:submissionId`：管理员/教师查看 AI 初评草稿、指标分和核查发现
@@ -220,7 +221,7 @@ OCR、旧版 `.doc`、复杂或加密 PDF、深度代码语义分析仍保留为
 - `GET /reports/exports`、`GET /reports/exports/:exportId`：查看报表导出状态、对象存储 key 和文件 hash
 - `GET /reports/exports/:exportId/download`：管理员或导出创建教师下载已成功生成的报表文件
 
-Web 工作台默认读取 `GET /users`、`GET /courses`、`GET /classes`、`GET /enrollments`、`GET /rubrics`、`GET /experiments`、`GET /submissions`、`GET /jobs`、`GET /audit-logs`、`GET /reports/statistics`、`GET /reports/exports`，并在选中提交后读取 `GET /evaluations/submissions/:submissionId` 或学生已发布反馈接口。基础数据维护入口会调用 `POST /users`、`POST /courses`、`POST /classes`、`POST /courses/:courseId/classes`、`POST /enrollments`、`POST /rubrics`、`POST /experiments`；上传入口会调用 `POST /submissions` 和 `POST /submissions/:submissionId/artifacts/upload`，提交列表与报表概览都可按课程、班级、实训任务、学生和状态筛选。
+Web 工作台默认读取 `GET /users`、`GET /courses`、`GET /classes`、`GET /enrollments`、`GET /rubrics`、`GET /experiments`、`GET /submissions`、`GET /jobs`、`GET /audit-logs`、`GET /reports/statistics`、`GET /reports/exports`，并在选中提交后读取 `GET /evaluations/submissions/:submissionId` 或学生已发布反馈接口。基础数据维护入口会调用 `POST /users`、`POST /courses`、`POST /classes`、`POST /courses/:courseId/classes`、`POST /enrollments`、`POST /rubrics`、`POST /experiments`；上传入口会调用 `POST /submissions`、`POST /submissions/:submissionId/artifacts/upload` 和 `POST /submissions/:submissionId/artifacts/git-link`，提交列表与报表概览都可按课程、班级、实训任务、学生和状态筛选。
 
 除健康检查和登录/初始化接口外，基础管理接口均需要 Bearer Token；管理员可创建用户，管理员/教师可维护课程、班级、评价模板和实训任务。
 
@@ -251,7 +252,7 @@ curl -X POST http://localhost:3000/submissions/<submissionId>/artifacts/upload \
   -F "file=@./report.pdf"
 ```
 
-`UPLOAD_MAX_BYTES` 控制单文件大小，当前支持 `word`、`pdf`、`image`、`code_archive`、`other` 文件类型；`git_link` 将使用后续专用入口。上传使用磁盘临时文件，避免高并发时把完整文件压在 Node.js 内存中。
+`UPLOAD_MAX_BYTES` 控制单文件大小，文件上传支持 `word`、`pdf`、`image`、`code_archive`、`other` 类型；`git_link` 使用专用 JSON 入口 `POST /submissions/:submissionId/artifacts/git-link`，避免把链接伪装成文件上传。文件上传使用磁盘临时文件，避免高并发时把完整文件压在 Node.js 内存中。
 
 上传成功会写入 `artifact.uploaded` 审计日志；解析 worker 成功/失败会写入 `artifact.parse_succeeded` 或 `artifact.parse_failed`。解析完成会自动排队 `evaluate_submission` 任务。管理员/教师可用 `GET /jobs?jobType=parse_artifact&submissionId=<id>` 定位异步任务进度，用 `GET /audit-logs?entityType=artifact&entityId=<id>` 查看处理留痕。
 
@@ -356,9 +357,10 @@ pnpm risk:loongarch
 - Web 筛选基础能力：前端可读取课程、班级、实训任务并用于上传任务选择和报表统计筛选。
 - Web 基础数据维护能力：前端可创建课程、班级、默认评价模板、实训任务，并绑定课程和班级。
 - Web 用户与分班能力：前端可创建用户、维护学生选课分班，并按课程、班级、实训任务、学生和状态联动筛选提交列表。
+- Git 链接成果能力：前后端均支持 Git 仓库链接作为独立成果类型提交，并做确定性仓库元数据提取。
 
 下一步：
 
-1. 扩展 OCR、旧版 `.doc`、复杂 PDF 和更深的代码语义解析能力，并补更多解析回归样例。
+1. 扩展 OCR、旧版 `.doc`、复杂 PDF、远端仓库内容探测和更深的代码语义解析能力，并补更多解析回归样例。
 2. 补齐更独立的学生/教师页面导航、教师端任务看板细分视图和 enrollment 批量导入能力。
 3. 增强报表图表、PDF 中文字体嵌入、导出下载体验和权限测试。
