@@ -56,3 +56,20 @@ test('rejects files above the configured limit', () => {
     BadRequestException,
   );
 });
+
+test('rejects git link uploads on the file endpoint', () => {
+  assert.throws(
+    () =>
+      validateArtifactUpload(
+        ArtifactKind.GitLink,
+        {
+          originalname: 'repo.url',
+          mimetype: 'text/plain',
+          size: 10,
+          buffer: Buffer.from('https://github.com/example/repo'),
+        },
+        1024,
+      ),
+    BadRequestException,
+  );
+});

@@ -81,6 +81,11 @@ export function extractArtifactContents(
     return drafts;
   }
 
+  if (artifact.kind === ArtifactKind.GitLink) {
+    drafts.push(buildGitLinkDraft(artifact, buffer, baseMetadata, maxTextChars));
+    return drafts;
+  }
+
   if (artifact.kind === ArtifactKind.Word) {
     drafts.push(...buildWordDrafts(artifact, buffer, baseMetadata, maxTextChars));
     return drafts;
@@ -173,6 +178,44 @@ function buildArchiveDraft(
       directoryCount,
       truncated: parsedArchive.entries.length > listedEntries.length,
       extensionCounts,
+    },
+  };
+}
+
+function buildGitLinkDraft(
+  artifact: ArtifactForParsing,
+  buffer: Buffer,
+  baseMetadata: Record<string, unknown>,
+  maxTextChars: number,
+): ExtractedContentDraft {
+  const payload = parseGitLinkPayload(buffer);
+  const parsed = payload ? parseGitRepositoryUrl(payload.url) : null;
+  const lines = [
+    `Repository URL: ${payload?.url ?? artifact.originalName}`,
+    parsed?.provider ? `Provider: ${parsed.provider}` : null,
+    parsed?.host ? `Host: ${parsed.host}` : null,
+    parsed?.owner ? `Owner: ${parsed.owner}` : null,
+    parsed?.repository ? `Repository: ${parsed.repository}` : null,
+    payload?.branch ? `Branch: ${payload.branch}` : null,
+    payload?.commitSha ? `Commit: ${payload.commitSha}` : null,
+    parsed?.subPath ? `Path: ${parsed.subPath}` : null,
+  ].filter((value): value is string => Boolean(value));
+
+  return {
+    sourceRef: `${artifact.storageKey}#git-link`,
+    contentKind: 'code_structure',
+    contentText: truncateText(lines.join('\n'), maxTextChars),
+    metadata: {
+      ...baseMetadata,
+      parser: 'git-link-v1',
+      gitUrl: payload?.url ?? null,
+      branch: payload?.branch ?? null,
+      commitSha: payload?.commitSha ?? null,
+      provider: parsed?.provider ?? null,
+      host: parsed?.host ?? null,
+      owner: parsed?.owner ?? null,
+      repository: parsed?.repository ?? null,
+      subPath: parsed?.subPath ?? null,
     },
   };
 }
@@ -274,6 +317,57 @@ function decodeText(buffer: Buffer, maxTextChars: number) {
     .filter((char) => char !== '\u0000')
     .join('');
   return truncateText(text, maxTextChars);
+}
+
+function parseGitLinkPayload(buffer: Buffer) {
+  try {
+    const parsed = JSON.parse(buffer.toString('utf8')) as { url?: unknown; branch?: unknown; commitSha?: unknown };
+    if (typeof parsed.url !== 'string') {
+      return null;
+    }
+    return {
+      url: parsed.url,
+      branch: typeof parsed.branch === 'string' ? parsed.branch : undefined,
+      commitSha: typeof parsed.commitSha === 'string' ? parsed.commitSha : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseGitRepositoryUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const owner = segments[0] ?? null;
+    const repository = segments[1]?.replace(/\.git$/i, '') ?? null;
+    let subPath: string | null = null;
+    if (segments.length > 4 && (segments[2] === 'tree' || segments[2] === 'blob')) {
+      subPath = segments.slice(4).join('/');
+    }
+    return {
+      provider: inferGitProvider(parsed.hostname),
+      host: parsed.hostname,
+      owner,
+      repository,
+      subPath,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function inferGitProvider(host: string) {
+  if (host.includes('github')) {
+    return 'github';
+  }
+  if (host.includes('gitlab')) {
+    return 'gitlab';
+  }
+  if (host.includes('gitee')) {
+    return 'gitee';
+  }
+  return 'generic';
 }
 
 function truncateText(value: string, maxTextChars: number) {

@@ -237,6 +237,20 @@ export class ApiClient {
     });
   }
 
+  async createGitLinkArtifact(
+    submissionId: string,
+    payload: {
+      url: string;
+      branch?: string;
+      commitSha?: string;
+    },
+  ) {
+    return this.request<UploadedArtifact>(`/submissions/${encodeURIComponent(submissionId)}/artifacts/git-link`, {
+      method: 'POST',
+      body: payload,
+    });
+  }
+
   async listJobs(limit = 12) {
     return this.request<Job[]>(`/jobs?${new URLSearchParams({ limit: String(limit) })}`);
   }

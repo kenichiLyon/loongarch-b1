@@ -13,7 +13,7 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { UserRole } from '../domain/core';
 import { sanitizeFileName } from '../storage/local-object-store.service';
 import { readUploadMaxBytes } from './artifact-upload.policy';
-import { CreateSubmissionDto, ListSubmissionsQueryDto, UploadArtifactDto } from './submissions.dto';
+import { CreateGitLinkArtifactDto, CreateSubmissionDto, ListSubmissionsQueryDto, UploadArtifactDto } from './submissions.dto';
 import { SubmissionsService } from './submissions.service';
 
 const multerUploadLimit = Number(process.env.UPLOAD_MAX_BYTES ?? 20 * 1024 * 1024);
@@ -60,5 +60,15 @@ export class SubmissionsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.submissionsService.uploadArtifact(submissionId, dto, file, user);
+  }
+
+  @Roles(UserRole.Admin, UserRole.Teacher, UserRole.Student)
+  @Post(':submissionId/artifacts/git-link')
+  createGitLinkArtifact(
+    @Param('submissionId') submissionId: string,
+    @Body() dto: CreateGitLinkArtifactDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.submissionsService.createGitLinkArtifact(submissionId, dto, user);
   }
 }

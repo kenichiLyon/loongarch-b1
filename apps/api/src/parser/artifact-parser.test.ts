@@ -157,6 +157,38 @@ test('extracts image dimensions from png metadata', () => {
   assert.equal(drafts[1].metadata.height, 2);
 });
 
+test('extracts repository metadata from git link payload', () => {
+  const buffer = Buffer.from(
+    JSON.stringify({
+      url: 'https://github.com/example-org/teaching-demo/tree/main/src',
+      branch: 'main',
+      commitSha: '0123456789abcdef0',
+    }),
+    'utf8',
+  );
+
+  const drafts = extractArtifactContents(
+    {
+      id: 'artifact-git',
+      kind: ArtifactKind.GitLink,
+      originalName: 'example-org-teaching-demo.gitlink.json',
+      mimeType: 'application/json',
+      sizeBytes: buffer.byteLength,
+      sha256: 'hash',
+      storageKey: 'artifacts/demo/example-org-teaching-demo.gitlink.json',
+    },
+    buffer,
+    300,
+  );
+
+  assert.equal(drafts[1].contentKind, 'code_structure');
+  assert.match(drafts[1].contentText, /github/);
+  assert.match(drafts[1].contentText, /example-org/);
+  assert.match(drafts[1].contentText, /teaching-demo/);
+  assert.equal(drafts[1].metadata.parser, 'git-link-v1');
+  assert.equal(drafts[1].metadata.branch, 'main');
+});
+
 test('keeps fallback metadata for unsupported legacy word files', () => {
   const drafts = extractArtifactContents(
     {

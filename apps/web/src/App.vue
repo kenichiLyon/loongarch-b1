@@ -386,12 +386,26 @@
               <option v-for="option in artifactKindOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
             </select>
           </label>
-          <label>
+          <label v-if="uploadForm.kind !== 'git_link'">
             选择文件
             <input type="file" @change="handleUploadFileChange" />
           </label>
+          <template v-else>
+            <label>
+              Git 仓库链接
+              <input v-model="gitLinkForm.url" placeholder="https://github.com/org/repo 或 tree/blob 链接" />
+            </label>
+            <label>
+              分支
+              <input v-model="gitLinkForm.branch" placeholder="可选，例如 main" />
+            </label>
+            <label>
+              Commit
+              <input v-model="gitLinkForm.commitSha" placeholder="可选，7-40 位十六进制" />
+            </label>
+          </template>
           <div class="actions">
-            <button :disabled="isBusy || !uploadForm.file" type="submit">上传并排队解析</button>
+            <button :disabled="isBusy || !canSubmitArtifact" type="submit">上传并排队解析</button>
             <button class="ghost-button" type="button" @click="resetUploadForm">清空</button>
           </div>
           <p class="helper-text">
@@ -634,12 +648,18 @@ const uploadForm = reactive<{
   kind: 'pdf',
   file: null,
 });
+const gitLinkForm = reactive({
+  url: '',
+  branch: '',
+  commitSha: '',
+});
 
 const artifactKindOptions: Array<{ value: ArtifactKind; label: string }> = [
   { value: 'pdf', label: 'PDF 报告' },
   { value: 'word', label: 'Word 文档' },
   { value: 'image', label: '界面截图' },
   { value: 'code_archive', label: '代码压缩包' },
+  { value: 'git_link', label: 'Git 链接' },
   { value: 'other', label: '其他文本材料' },
 ];
 const defaultRubricMetrics = [
@@ -675,6 +695,12 @@ const defaultRubricMetrics = [
 
 const canManageFoundation = computed(() => sessionUser.value?.role === 'admin' || sessionUser.value?.role === 'teacher');
 const canManageUsers = computed(() => sessionUser.value?.role === 'admin');
+const canSubmitArtifact = computed(() => {
+  if (uploadForm.kind === 'git_link') {
+    return gitLinkForm.url.trim().length > 0;
+  }
+  return uploadForm.file !== null;
+});
 const runningJobCount = computed(() => jobs.value.filter((job) => job.status === 'running').length);
 const studentUsers = computed(() => users.value.filter((user) => user.role === 'student'));
 const filteredStudentOptions = computed(() => {
@@ -1012,8 +1038,12 @@ async function createExport(reportType: 'student' | 'class' | 'course', format: 
 }
 
 async function submitArtifactUpload() {
-  if (!uploadForm.file) {
+  if (uploadForm.kind !== 'git_link' && !uploadForm.file) {
     viewError.value = '请选择需要上传的成果文件。';
+    return;
+  }
+  if (uploadForm.kind === 'git_link' && !gitLinkForm.url.trim()) {
+    viewError.value = '请填写 Git 仓库链接。';
     return;
   }
   await withBusy(async () => {
@@ -1031,9 +1061,19 @@ async function submitArtifactUpload() {
       selectedSubmissionId.value = submission.id;
     }
 
-    const artifact = await apiClient.uploadArtifact(submissionId, uploadForm.kind, uploadForm.file as File);
+    const artifact =
+      uploadForm.kind === 'git_link'
+        ? await apiClient.createGitLinkArtifact(submissionId, {
+            url: gitLinkForm.url.trim(),
+            branch: gitLinkForm.branch.trim() || undefined,
+            commitSha: gitLinkForm.commitSha.trim() || undefined,
+          })
+        : await apiClient.uploadArtifact(submissionId, uploadForm.kind, uploadForm.file as File);
     viewMessage.value = `成果 ${artifact.originalName} 已上传，解析任务已入队。`;
     uploadForm.file = null;
+    if (uploadForm.kind === 'git_link') {
+      resetGitLinkForm();
+    }
     submissions.value = await apiClient.listSubmissions({
       courseId: selectedCourseId.value || undefined,
       classId: selectedClassId.value || undefined,
@@ -1123,6 +1163,13 @@ function resetUploadForm() {
   uploadForm.submissionId = '';
   uploadForm.kind = 'pdf';
   uploadForm.file = null;
+  resetGitLinkForm();
+}
+
+function resetGitLinkForm() {
+  gitLinkForm.url = '';
+  gitLinkForm.branch = '';
+  gitLinkForm.commitSha = '';
 }
 
 function resetUserForm() {
