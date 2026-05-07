@@ -467,6 +467,69 @@ h2 {
   margin-top: 12px;
 }
 
+.context-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  border: 1px solid rgba(35, 59, 51, 0.12);
+  border-radius: 22px;
+  padding: 16px;
+  background: rgba(255, 255, 248, 0.48);
+}
+
+.context-layout {
+  display: grid;
+  gap: 12px;
+}
+
+.context-meta {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.context-text {
+  overflow: auto;
+  max-height: 320px;
+  margin: 0;
+  border: 1px solid rgba(35, 59, 51, 0.1);
+  border-radius: 16px;
+  padding: 14px;
+  color: var(--ink);
+  background: rgba(255, 255, 248, 0.88);
+  font-family: "Source Han Serif SC", "Noto Serif SC", "Microsoft YaHei", serif;
+  font-size: 0.86rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.context-history {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.context-history button {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  border: 1px solid rgba(35, 59, 51, 0.12);
+  border-radius: 16px;
+  padding: 12px;
+  color: var(--ink);
+  text-align: left;
+  background: rgba(255, 255, 248, 0.68);
+  box-shadow: none;
+}
+
+.context-history button.is-active {
+  color: #fff8ea;
+  background: linear-gradient(135deg, #233b33, #416558);
+}
+
 .upload-form,
 .feedback-panel {
   display: grid;

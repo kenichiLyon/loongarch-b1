@@ -6,6 +6,7 @@ import type {
   Course,
   Enrollment,
   Evaluation,
+  EvaluationContextSnapshot,
   Experiment,
   Job,
   ReportExport,
@@ -261,6 +262,14 @@ export class ApiClient {
 
   async getEvaluation(submissionId: string) {
     return this.request<Evaluation>(`/evaluations/submissions/${encodeURIComponent(submissionId)}`);
+  }
+
+  async getLatestEvaluationContext(submissionId: string) {
+    return this.request<EvaluationContextSnapshot>(`/evaluations/submissions/${encodeURIComponent(submissionId)}/context-latest`);
+  }
+
+  async getEvaluationContextHistory(submissionId: string) {
+    return this.request<EvaluationContextSnapshot[]>(`/evaluations/submissions/${encodeURIComponent(submissionId)}/context-history`);
   }
 
   async getPublishedEvaluation(submissionId: string) {
