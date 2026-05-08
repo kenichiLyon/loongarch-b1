@@ -40,7 +40,7 @@
 | 数据库 | PostgreSQL | 结构化业务数据、任务状态、评分结果 |
 | 文件存储 | Local ObjectStore | 首版本地对象存储，预留 MinIO/S3 |
 | 大模型 | OpenAI-compatible HTTP API | 云端优先，本地/局域网模型服务可插拔 |
-| 部署 | systemd + Docker/Podman | 同时维护非容器与容器方案 |
+| 部署 | runtime bundle + systemd；Docker/Podman 次级 | 主交付为 Node.js 运行时压缩包，容器为可选方案 |
 
 ## 4. 仓库结构
 
@@ -140,6 +140,33 @@ pnpm test:scripts
 pnpm lint
 pnpm build
 pnpm risk:loongarch
+```
+
+### 主交付运行时包
+
+主交付推荐使用 Node.js 运行时压缩包，而不是源码安装：
+
+```bash
+pnpm build
+pnpm bundle:runtime
+```
+
+输出目录：
+
+```text
+release/runtime
+```
+
+它包含：
+
+- `api/`：后端代码和生产依赖
+- `web/`：前端静态文件
+- `scripts/deploy/kylin-loongarch/`：启动、停止、状态脚本
+
+解压后可直接：
+
+```bash
+bash scripts/deploy/kylin-loongarch/start-stack.sh
 ```
 
 ### 解析 Worker
@@ -365,9 +392,11 @@ pnpm risk:loongarch
 - Web 用户与分班能力：前端可创建用户、维护学生选课分班，并按课程、班级、实训任务、学生和状态联动筛选提交列表。
 - Git 链接成果能力：前后端均支持 Git 仓库链接作为独立成果类型提交，并做确定性仓库元数据提取。
 - 教师侧上下文可视化能力：前端可查看某个提交的最新上下文快照和快照历史，用于排查评分依据。
+- 主交付运行时包能力：CD 可自动产出包含生产依赖、前端静态文件和部署脚本的 runtime bundle，解压后可直接用 `node` 或 `bash` 启动。
+- Docker 次级交付能力：仓库和发布物中提供 `Dockerfile`、`compose.yaml`，CI 会验证 Docker 构建。
 
 下一步：
 
 1. 扩展旧版 `.doc`、复杂 PDF、远端仓库内容探测和更深的代码语义解析能力，并补更多解析回归样例。
 2. 补齐更独立的学生/教师页面导航、教师端任务看板细分视图、上下文快照前端筛选/检索和 enrollment 批量导入能力。
-3. 增强报表图表、PDF 中文字体嵌入、导出下载体验和权限测试。
+3. 在真实 LoongArch + 银河麒麟机器上验证 runtime bundle、OCR 和容器基础镜像可用性，并回写部署记录。

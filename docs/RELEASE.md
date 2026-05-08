@@ -12,13 +12,17 @@
 
 CD 工作流会生成 `release/` 目录并上传为 artifact：
 
+- `runtime/`：主交付运行时目录，包含 API 生产依赖、后端构建产物、前端静态文件和部署脚本。
 - `web/`：前端 Vite 构建产物，可由 Nginx 或静态服务托管。
 - `api/`：后端 `dist/`、API package.json、数据库迁移 SQL。
 - `docs/`：README、AGENT、部署与开发文档。
 - `scripts/`：部署与运维脚本，包括银河麒麟 + LoongArch 的一键启动脚本与 systemd 模板。
+- `docker-context/`：Docker 次级交付上下文，包含 `Dockerfile`、`compose.yaml` 和构建所需源码。
+- `bundles/loongarch-b1-runtime-<sha>.tar.gz`：主交付运行时压缩包。
 - `bundles/loongarch-b1-web-<sha>.tar.gz`：前端压缩包。
 - `bundles/loongarch-b1-api-<sha>.tar.gz`：后端压缩包。
 - `bundles/loongarch-b1-docs-<sha>.tar.gz`：文档与清单压缩包。
+- `bundles/loongarch-b1-docker-context-<sha>.tar.gz`：Docker 次级交付上下文压缩包。
 - `BUILD_MANIFEST.json`：构建时间、commit、ref、Node/pnpm 版本、目标平台和产物列表。
 
 ## 自动检查
@@ -36,13 +40,15 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Release 资产包含 web/api/docs 三个压缩包和 `BUILD_MANIFEST.json`；自动构建目录中还会包含 `scripts/`，便于直接使用部署脚本。
+Release 资产现在包含 `runtime/web/api/docs/docker-context` 对应压缩包和 `BUILD_MANIFEST.json`；其中 `runtime` 是推荐主交付，`docker-context` 是次级交付。
 
 ## 目标环境落地说明
 
-- Web 产物是静态文件，可部署到 Nginx，也可由 API 进程直接托管。
-- API 产物不包含 `node_modules`，目标环境需按 `pnpm-lock.yaml` 安装生产依赖或使用后续容器镜像。
+- `runtime` 产物是主交付：目标环境不需要再次执行 `pnpm install`，解压后即可用 `node` 或 `start-stack.sh` 启动。
+- Web 产物仍单独保留，可部署到 Nginx，也可由 API 进程直接托管。
+- `api` 产物保留为调试/拆分部署用途，不包含 `node_modules`。
 - 数据库迁移 SQL 随 API 产物一起发布，部署时执行 `pnpm db:migrate`。
 - 解析、评价、导出 worker 可通过单一命令 `node dist/workers/all-workers.js` 或 `scripts/deploy/kylin-loongarch/start-stack.sh` 启动。
+- Docker 作为次级交付：仓库和 `docker-context` 压缩包中都包含 `Dockerfile` 与 `compose.yaml`，CI 会验证 Dockerfile 可构建。
 - 目标系统部署步骤见 `docs/DEPLOY_KYLIN_LOONGARCH.md`。
 - LoongArch 上仍需按 `docs/LOONGARCH_COMPATIBILITY.md` 验证 Node.js、pnpm、PostgreSQL 和 native optional 依赖。

@@ -65,6 +65,9 @@ jobs:
       - name: Build workspace
         run: pnpm build
 
+      - name: Build runtime bundle
+        run: pnpm bundle:runtime
+
       - name: Stage release payload
         shell: bash
         run: |
@@ -73,7 +76,7 @@ jobs:
           version="${GITHUB_REF_NAME}"
           build_time="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
-          mkdir -p release/web release/api/dist release/api/migrations release/docs release/scripts release/bundles
+          mkdir -p release/web release/api/dist release/api/migrations release/docs release/scripts release/docker-context release/bundles
           cp -R apps/web/dist/. release/web/
           cp -R apps/api/dist/. release/api/dist/
           cp -R apps/api/migrations/. release/api/migrations/
@@ -81,6 +84,11 @@ jobs:
           cp package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc .env.example README.md AGENT.md release/
           cp -R docs/. release/docs/
           cp -R scripts/. release/scripts/
+          cp Dockerfile compose.yaml .dockerignore release/docker-context/
+          cp package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json .npmrc .env.example README.md AGENT.md release/docker-context/
+          cp -R apps/. release/docker-context/apps/
+          cp -R docs/. release/docker-context/docs/
+          cp -R scripts/. release/docker-context/scripts/
 
           cat > release/BUILD_MANIFEST.json <<EOF
           {
@@ -94,16 +102,20 @@ jobs:
             "pnpmVersion": "${PNPM_VERSION}",
             "target": "LoongArch + Kylin Advanced Server",
             "artifacts": [
+              "loongarch-b1-runtime-${short_sha}.tar.gz",
               "loongarch-b1-web-${short_sha}.tar.gz",
               "loongarch-b1-api-${short_sha}.tar.gz",
-              "loongarch-b1-docs-${short_sha}.tar.gz"
+              "loongarch-b1-docs-${short_sha}.tar.gz",
+              "loongarch-b1-docker-context-${short_sha}.tar.gz"
             ]
           }
           EOF
 
+          tar -czf "release/bundles/loongarch-b1-runtime-${short_sha}.tar.gz" -C release/runtime .
           tar -czf "release/bundles/loongarch-b1-web-${short_sha}.tar.gz" -C release/web .
           tar -czf "release/bundles/loongarch-b1-api-${short_sha}.tar.gz" -C release/api .
           tar -czf "release/bundles/loongarch-b1-docs-${short_sha}.tar.gz" -C release README.md AGENT.md docs .env.example BUILD_MANIFEST.json
+          tar -czf "release/bundles/loongarch-b1-docker-context-${short_sha}.tar.gz" -C release/docker-context .
 
       - name: Upload auto build artifact
         uses: actions/upload-artifact@v4

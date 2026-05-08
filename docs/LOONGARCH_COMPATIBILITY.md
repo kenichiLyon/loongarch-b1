@@ -86,4 +86,10 @@
 - 依赖：不把 OCR 引擎打进 Node.js 依赖树，仍由目标机自行安装系统二进制。
 - 影响：LoongArch + 银河麒麟机器只要能安装可用的 `tesseract` 包，就能增强截图解析；未安装时不影响主流程。
 
+### 2026-05-08：运行时压缩包与 Docker 次级交付
+
+- 变更：新增 `release/runtime` 主交付运行时目录生成脚本、`Dockerfile`、`compose.yaml` 和 CI Docker 构建校验。
+- 依赖：主交付仍只依赖 Node.js 运行时；Docker 方案依赖目标机可用的容器基础镜像和引擎。
+- 影响：首版交付优先使用 runtime bundle + systemd；Docker/Podman 仅作为次级交付，需在 LoongArch 目标机额外验证基础镜像和 `postgres` 镜像可用性。
+
 后续每次发现平台差异时，在本文件追加：验证日期、目标环境版本、依赖版本、测试命令、结果和替代方案。

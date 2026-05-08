@@ -10,6 +10,7 @@
 
 ## 当前脚本
 
+- `build-runtime-bundle.mjs`：基于 `pnpm deploy --legacy --prod` 生成主交付运行时目录 `release/runtime`，包含 API 生产依赖、前端静态文件和部署脚本。
 - `loongarch-dependency-risk.mjs`：扫描 `pnpm-lock.yaml` 中的 LoongArch/银河麒麟依赖风险，执行 `pnpm risk:loongarch` 会生成 `docs/LOONGARCH_DEPENDENCY_RISK.md`。
 - `loongarch-dependency-risk.test.mjs`：使用 Node.js 内置 test runner 验证 lockfile 解析、风险分级和 Markdown 报告渲染，可通过 `pnpm test:scripts` 执行。
 - `deploy/kylin-loongarch/start-stack.sh`：在目标系统上一条命令启动数据库迁移、API 和合并 worker。

@@ -12,6 +12,8 @@
     "test": "pnpm -r test && pnpm test:scripts",
     "test:scripts": "node --test scripts/*.test.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm build",
+    "bundle:runtime": "node scripts/build-runtime-bundle.mjs",
+    "docker:build": "docker build --target runtime -t loongarch-b1:local .",
     "db:migrate": "pnpm --filter @loongarch-b1/api db:migrate",
     "worker:parse": "pnpm --filter @loongarch-b1/api worker:parse",
     "worker:evaluate": "pnpm --filter @loongarch-b1/api worker:evaluate",

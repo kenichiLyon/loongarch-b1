@@ -44,6 +44,9 @@ jobs:
       - name: Build workspace
         run: pnpm build
 
+      - name: Validate Docker build
+        run: docker build --target runtime -t loongarch-b1:test .
+
   sourcery:
     name: Sourcery AI code review
     runs-on: ubuntu-latest
