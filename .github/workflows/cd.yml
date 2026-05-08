@@ -124,6 +124,46 @@ jobs:
           path: release/
           retention-days: 30
 
+      - name: Publish or update prerelease for main
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pre_tag="pre-main"
+          short_sha="${GITHUB_SHA::7}"
+          build_time="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          notes="Latest auto build artifacts from main.
+
+          Commit: ${GITHUB_SHA}
+          Short commit: ${short_sha}
+          Build time: ${build_time}
+
+          This prerelease is an artifact carrier for the latest main build. The attached bundles and BUILD_MANIFEST.json are the source of truth for the exact runtime contents."
+
+          if gh release view "${pre_tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${pre_tag}" \
+              release/bundles/*.tar.gz \
+              release/BUILD_MANIFEST.json \
+              --clobber \
+              --repo "${GITHUB_REPOSITORY}"
+            gh release edit "${pre_tag}" \
+              --title "pre-main" \
+              --notes "${notes}" \
+              --prerelease \
+              --repo "${GITHUB_REPOSITORY}"
+          else
+            gh release create "${pre_tag}" \
+              release/bundles/*.tar.gz \
+              release/BUILD_MANIFEST.json \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "pre-main" \
+              --notes "${notes}" \
+              --prerelease \
+              --target "${GITHUB_SHA}"
+          fi
+
       - name: Publish GitHub release on version tags
         if: startsWith(github.ref, 'refs/tags/v')
         env:

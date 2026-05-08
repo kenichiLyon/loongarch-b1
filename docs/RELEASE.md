@@ -5,6 +5,7 @@
 ## 触发方式
 
 - 推送到 `main`：生成 auto build artifact，保留 30 天。
+- 推送到 `main`：同时刷新 GitHub prerelease `pre-main`，便于直接下载最新构建包。
 - 手动触发 `workflow_dispatch`：生成一次 auto build artifact。
 - 推送 `v*` tag：生成 auto build artifact，并发布 GitHub Release。
 
@@ -41,6 +42,25 @@ git push origin v0.1.0
 ```
 
 Release 资产现在包含 `runtime/web/api/docs/docker-context` 对应压缩包和 `BUILD_MANIFEST.json`；其中 `runtime` 是推荐主交付，`docker-context` 是次级交付。
+
+## 预发布版本
+
+仓库会维护一个固定 prerelease：
+
+- Tag：`pre-main`
+- Release 名称：`pre-main`
+
+用途：
+
+- 始终承载 `main` 分支最新一次成功构建的 bundles
+- 方便测试部署、试点环境和验收人员直接拿“最新可运行包”
+- 不替代正式版本 tag release
+
+更新规则：
+
+- 每次 `main` 分支 CD 成功后，workflow 会用 `--clobber` 替换 prerelease 资产
+- 该 prerelease 的 source code tag 不是构建真实性来源
+- 真正的构建来源以附件中的 `BUILD_MANIFEST.json` 和 bundles 内内容为准
 
 ## 目标环境落地说明
 

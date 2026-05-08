@@ -332,6 +332,7 @@ pnpm risk:loongarch
 本项目已配置 CD 工作流：
 
 - 推送 `main` 或手动触发时，GitHub Actions 会运行测试、构建前后端，并上传 auto build artifact。
+- 推送 `main` 成功后，会自动刷新 GitHub prerelease `pre-main`，便于直接下载最新 bundles。
 - 推送 `v*` tag 时，会额外创建 GitHub Release 并附带 Web/API/Docs 压缩包和 `BUILD_MANIFEST.json`。
 - CI/CD 均运行 `pnpm lint`；配置 `SOURCERY_TOKEN` 后，CI/CD 会执行 Sourcery AI 自动代码审核。
 - 发布细节见 `docs/RELEASE.md`。
@@ -394,6 +395,7 @@ pnpm risk:loongarch
 - 教师侧上下文可视化能力：前端可查看某个提交的最新上下文快照和快照历史，用于排查评分依据。
 - 主交付运行时包能力：CD 可自动产出包含生产依赖、前端静态文件和部署脚本的 runtime bundle，解压后可直接用 `node` 或 `bash` 启动。
 - Docker 次级交付能力：仓库和发布物中提供 `Dockerfile`、`compose.yaml`，CI 会验证 Docker 构建。
+- GitHub prerelease 能力：仓库维护固定 `pre-main` 预发布，直接承载最新 main 成功构建产物。
 
 下一步：
 
