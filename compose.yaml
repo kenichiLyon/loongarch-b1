@@ -1,0 +1,78 @@
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16-bookworm}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-loongarch_b1}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-loongarch_b1}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_BUILD_IMAGE: ${NODE_BUILD_IMAGE:-node:22-bookworm}
+        NODE_RUNTIME_IMAGE: ${NODE_RUNTIME_IMAGE:-node:22-bookworm-slim}
+    environment:
+      API_PORT: 3000
+      WEB_DIST_DIR: /opt/loongarch-b1/web
+      STORAGE_ROOT: /opt/loongarch-b1/storage
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-loongarch_b1}
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-change-me}
+      AUTH_BOOTSTRAP_TOKEN: ${AUTH_BOOTSTRAP_TOKEN:-change-me-too}
+      OCR_TESSERACT_BIN: ${OCR_TESSERACT_BIN:-}
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-chi_sim+eng}
+      OCR_TIMEOUT_MS: ${OCR_TIMEOUT_MS:-15000}
+      LLM_PROVIDER: ${LLM_PROVIDER:-cloud}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+    command: ["sh", "-lc", "node api/dist/database/migrate.js && node api/dist/main.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-3000}:3000"
+    volumes:
+      - storage:/opt/loongarch-b1/storage
+
+  workers:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_BUILD_IMAGE: ${NODE_BUILD_IMAGE:-node:22-bookworm}
+        NODE_RUNTIME_IMAGE: ${NODE_RUNTIME_IMAGE:-node:22-bookworm-slim}
+    environment:
+      WEB_DIST_DIR: /opt/loongarch-b1/web
+      STORAGE_ROOT: /opt/loongarch-b1/storage
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-loongarch_b1}
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-change-me}
+      AUTH_BOOTSTRAP_TOKEN: ${AUTH_BOOTSTRAP_TOKEN:-change-me-too}
+      OCR_TESSERACT_BIN: ${OCR_TESSERACT_BIN:-}
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-chi_sim+eng}
+      OCR_TIMEOUT_MS: ${OCR_TIMEOUT_MS:-15000}
+      LLM_PROVIDER: ${LLM_PROVIDER:-cloud}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      PARSE_JOB_BATCH_SIZE: ${PARSE_JOB_BATCH_SIZE:-5}
+      EVALUATE_JOB_BATCH_SIZE: ${EVALUATE_JOB_BATCH_SIZE:-5}
+      EXPORT_JOB_BATCH_SIZE: ${EXPORT_JOB_BATCH_SIZE:-3}
+    command: ["node", "api/dist/workers/all-workers.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - storage:/opt/loongarch-b1/storage
+
+volumes:
+  pgdata:
+  storage:

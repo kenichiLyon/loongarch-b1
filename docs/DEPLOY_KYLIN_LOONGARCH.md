@@ -56,14 +56,16 @@ cp .env.example .env
 
 ## 5. 从 Release Artifact 部署
 
-如果使用 GitHub Actions 产物，解压后建议目录结构保持：
+推荐优先使用 `loongarch-b1-runtime-<sha>.tar.gz`。
+
+解压后建议目录结构保持：
 
 ```text
 /opt/loongarch-b1
   api/
   web/
-  docs/
   scripts/
+  DEPLOY_KYLIN_LOONGARCH.md
   .env
 ```
 
@@ -71,6 +73,13 @@ cp .env.example .env
 
 - 源码布局：`apps/api/dist` + `apps/web/dist`
 - Release 布局：`api/dist` + `web/`
+
+如果只拿到 `runtime` 压缩包，直接解压即可：
+
+```bash
+tar -xzf loongarch-b1-runtime-<sha>.tar.gz -C /opt/loongarch-b1
+cp /opt/loongarch-b1/.env.example /opt/loongarch-b1/.env
+```
 
 ## 6. 一条命令启动
 
@@ -216,4 +225,36 @@ curl -X POST http://127.0.0.1:3000/auth/bootstrap-admin \
 建议策略：
 
 - 当前保留 `systemd + start-stack.sh` 作为主部署路径。
-- 下一阶段可以补一个 `Dockerfile` 和 `podman-compose`/`docker-compose` 示例，定位为“可选部署方案”。
+- 已补 `Dockerfile` 和 `compose.yaml`，定位为“可选部署方案”。
+- 优先使用运行时压缩包和 `node`/`bash` 启动；只有在环境已经具备稳定容器基础镜像时，再切换到 Docker/Podman。
+
+## 15. Docker 次级交付
+
+仓库根目录现在包含：
+
+- `Dockerfile`
+- `compose.yaml`
+- `.dockerignore`
+
+适用场景：
+
+- amd64/arm64 开发测试
+- 统一 CI 验证
+- 后续在目标机确认可用基础镜像后，作为可选运行方式
+
+本机或 CI 构建命令：
+
+```bash
+docker build --target runtime -t loongarch-b1:local .
+```
+
+compose 试跑：
+
+```bash
+docker compose up --build
+```
+
+注意：
+
+- 当前 `compose.yaml` 默认使用 `postgres:16-bookworm` 和 `node:22` 官方镜像，主要用于次级交付和常见平台验证。
+- 如果要在 LoongArch 目标机使用容器方式，需先把 `POSTGRES_IMAGE`、`NODE_BUILD_IMAGE`、`NODE_RUNTIME_IMAGE` 切到实际可用的 LoongArch 基础镜像。

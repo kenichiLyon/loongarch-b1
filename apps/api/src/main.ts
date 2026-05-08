@@ -23,7 +23,7 @@ async function bootstrap() {
 }
 
 function registerWebDist(app: NestExpressApplication) {
-  const webDistDir = path.resolve(process.env.WEB_DIST_DIR?.trim() || path.join(process.cwd(), 'apps', 'web', 'dist'));
+  const webDistDir = resolveWebDistDir();
   const indexHtml = path.join(webDistDir, 'index.html');
   if (!existsSync(indexHtml)) {
     return;
@@ -36,6 +36,20 @@ function registerWebDist(app: NestExpressApplication) {
   instance.get('/', (_request: unknown, response: { sendFile: (filePath: string) => void }) => {
     response.sendFile(indexHtml);
   });
+}
+
+function resolveWebDistDir() {
+  const configured = process.env.WEB_DIST_DIR?.trim();
+  if (configured) {
+    return path.resolve(configured);
+  }
+
+  const candidates = [
+    path.join(process.cwd(), 'web'),
+    path.join(process.cwd(), 'apps', 'web', 'dist'),
+  ];
+  const matched = candidates.find((candidate) => existsSync(path.join(candidate, 'index.html')));
+  return path.resolve(matched ?? candidates[1]);
 }
 
 void bootstrap();
