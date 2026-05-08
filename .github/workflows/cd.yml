@@ -85,7 +85,7 @@ jobs:
           cp -R docs/. release/docs/
           cp -R scripts/. release/scripts/
           cp Dockerfile compose.yaml .dockerignore release/docker-context/
-          cp package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc .env.example README.md AGENT.md release/docker-context/
+          cp package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json .npmrc .env.example README.md AGENT.md release/docker-context/
           cp -R apps/. release/docker-context/apps/
           cp -R docs/. release/docker-context/docs/
           cp -R scripts/. release/docker-context/scripts/

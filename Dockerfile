@@ -10,7 +10,7 @@ WORKDIR /workspace
 
 RUN corepack enable
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc .env.example README.md AGENT.md ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json .npmrc .env.example README.md AGENT.md ./
 COPY apps ./apps
 COPY docs ./docs
 COPY scripts ./scripts
