@@ -13,14 +13,16 @@
 
 CD 工作流会生成 `release/` 目录并上传为 artifact：
 
-- `runtime/`：主交付运行时目录，包含 API 生产依赖、后端构建产物、前端静态文件和部署脚本。
-- `runtime/package.json`：部署专用 npm 入口，支持 `npm run start` / `npm run worker:all` / `npm run db:migrate`。
+- `runtime/`：主交付运行时目录，包含 API 生产依赖、后端构建产物、前端静态文件、`docs/` 索引和部署脚本。
+- `runtime/package.json`：部署专用 npm 入口，支持 `npm run start` / `npm run worker:all` / `npm run db:migrate`，并提供 `loongarch-b1` CLI。
+- `runtime/loongarch-b1`：直接执行的 CLI 入口。
 - `web/`：前端 Vite 构建产物，可由 Nginx 或静态服务托管。
 - `api/`：后端 `dist/`、API package.json、数据库迁移 SQL。
 - `docs/`：README、AGENT、部署与开发文档。
 - `scripts/`：部署与运维脚本，包括银河麒麟 + LoongArch 的一键启动脚本与 systemd 模板。
 - `docker-context/`：Docker 次级交付上下文，包含 `Dockerfile`、`compose.yaml` 和构建所需源码。
 - `bundles/loongarch-b1-runtime-<sha>.tar.gz`：主交付运行时压缩包。
+- `bundles/loongarch-b1-runtime-npm-<sha>.tgz`：可 `npm install -g` 的 runtime 包。
 - `bundles/loongarch-b1-web-<sha>.tar.gz`：前端压缩包。
 - `bundles/loongarch-b1-api-<sha>.tar.gz`：后端压缩包。
 - `bundles/loongarch-b1-docs-<sha>.tar.gz`：文档与清单压缩包。
@@ -42,7 +44,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Release 资产现在包含 `runtime/web/api/docs/docker-context` 对应压缩包和 `BUILD_MANIFEST.json`；其中 `runtime` 是推荐主交付，`docker-context` 是次级交付。
+Release 资产现在包含 `runtime/web/api/docs/docker-context` 对应压缩包、`runtime-npm` 包和 `BUILD_MANIFEST.json`；其中 `runtime` 是推荐主交付，`runtime-npm` 是可直接安装的 Node 交付包，`docker-context` 是次级交付。
 
 ## 预发布版本
 
@@ -65,7 +67,8 @@ Release 资产现在包含 `runtime/web/api/docs/docker-context` 对应压缩包
 
 ## 目标环境落地说明
 
-- `runtime` 产物是主交付：目标环境不需要再次执行 `pnpm install`，解压后即可用 `node`、`npm run ...` 或 `start-stack.sh` 启动。
+- `runtime` 产物是主交付：目标环境不需要再次执行 `pnpm install`，解压后即可用 `node`、`npm run ...`、`./loongarch-b1 ...` 或 `start-stack.sh` 启动。
+- `runtime-npm` 产物可以用 `npm install -g <tgz>` 安装后直接使用 `loongarch-b1 ...` 命令。
 - Web 产物仍单独保留，可部署到 Nginx，也可由 API 进程直接托管。
 - `api` 产物保留为调试/拆分部署用途，不包含 `node_modules`。
 - 数据库迁移 SQL 随 API 产物一起发布，部署时执行 `pnpm db:migrate`。

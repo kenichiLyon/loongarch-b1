@@ -63,6 +63,7 @@ cp .env.example .env
 ```text
 /opt/loongarch-b1
   package.json
+  loongarch-b1
   api/
   web/
   scripts/
@@ -76,12 +77,29 @@ cp .env.example .env
 - Release 布局：`api/dist` + `web/`
 
 运行时压缩包里还会带一个部署专用 `package.json`，用于兼容 `npm run ...` 的常见使用方式。
+运行时压缩包还会带一个 `loongarch-b1` 可执行入口，解压后即可直接调用单命令。
+如果需要标准 npm 安装，`runtime-npm` 包可以直接 `npm install -g` 后得到 `loongarch-b1` 命令。
 
 如果只拿到 `runtime` 压缩包，直接解压即可：
 
 ```bash
 tar -xzf loongarch-b1-runtime-<sha>.tar.gz -C /opt/loongarch-b1
 cp /opt/loongarch-b1/.env.example /opt/loongarch-b1/.env
+```
+
+解压后如果直接在目录里执行：
+
+```bash
+./loongarch-b1 start
+./loongarch-b1 worker:all
+./loongarch-b1 db:migrate
+```
+
+如果安装到全局 PATH：
+
+```bash
+npm install -g ./loongarch-b1-runtime-npm-<sha>.tgz
+loongarch-b1 start
 ```
 
 ## 6. 一条命令启动
@@ -136,6 +154,21 @@ npm run worker:all
 - `npm run worker:all`：启动解析、评价、导出合并 worker
 - `npm run db:migrate`：执行数据库迁移
 - `npm run start:stack`：等价于 `bash scripts/deploy/kylin-loongarch/start-stack.sh`
+
+如果部署方已经把 runtime 包安装到全局 PATH，也可以直接：
+
+```bash
+loongarch-b1 start
+loongarch-b1 worker:all
+loongarch-b1 db:migrate
+```
+
+如果使用发布物里的 `runtime-npm` 包：
+
+```bash
+npm install -g ./loongarch-b1-runtime-npm-<sha>.tgz
+loongarch-b1 start
+```
 
 ## 7. 运行日志
 
