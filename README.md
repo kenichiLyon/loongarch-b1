@@ -155,16 +155,26 @@ pnpm bundle:runtime
 
 ```text
 release/runtime
+release/bundles/loongarch-b1-runtime-npm-<shortsha>.tgz
 ```
 
 它包含：
 
-- `package.json`：部署专用入口，可直接用 `npm run ...`
+- `package.json`：部署专用入口，可直接用 `npm run ...` 或 `npm install -g` 后使用 CLI
+- `loongarch-b1`：直接执行的 CLI 入口
 - `api/`：后端代码和生产依赖
 - `web/`：前端静态文件
 - `scripts/deploy/kylin-loongarch/`：启动、停止、状态脚本
 
-解压后可直接：
+解压后推荐直接：
+
+```bash
+./loongarch-b1 start
+./loongarch-b1 worker:all
+./loongarch-b1 db:migrate
+```
+
+兼容运维脚本：
 
 ```bash
 bash scripts/deploy/kylin-loongarch/start-stack.sh
@@ -176,6 +186,21 @@ bash scripts/deploy/kylin-loongarch/start-stack.sh
 npm run start
 npm run worker:all
 npm run db:migrate
+```
+
+如果要用标准 npm 包方式安装 runtime 交付物：
+
+```bash
+npm install -g ./release/bundles/loongarch-b1-runtime-npm-<shortsha>.tgz
+loongarch-b1 start
+```
+
+如果已经全局安装，则直接：
+
+```bash
+loongarch-b1 start
+loongarch-b1 worker:all
+loongarch-b1 db:migrate
 ```
 
 ### 解析 Worker

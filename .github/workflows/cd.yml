@@ -103,6 +103,7 @@ jobs:
             "target": "LoongArch + Kylin Advanced Server",
             "artifacts": [
               "loongarch-b1-runtime-${short_sha}.tar.gz",
+              "loongarch-b1-runtime-npm-${short_sha}.tgz",
               "loongarch-b1-web-${short_sha}.tar.gz",
               "loongarch-b1-api-${short_sha}.tar.gz",
               "loongarch-b1-docs-${short_sha}.tar.gz",
