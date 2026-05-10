@@ -7,6 +7,8 @@ const releaseDir = path.join(rootDir, 'release');
 const runtimeDir = path.join(releaseDir, 'runtime');
 const runtimeApiDir = path.join(runtimeDir, 'api');
 const runtimeWebDir = path.join(runtimeDir, 'web');
+const runtimeDocsDir = path.join(runtimeDir, 'docs');
+const bundlesDir = path.join(releaseDir, 'bundles');
 const rootManifest = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 const shortSha = resolveShortSha();
 
@@ -25,6 +27,7 @@ for (const requiredFile of requiredFiles) {
 
 rmSync(runtimeDir, { recursive: true, force: true });
 mkdirSync(runtimeDir, { recursive: true });
+mkdirSync(bundlesDir, { recursive: true });
 
 const escapedRuntimeApiDir = process.platform === 'win32' ? `"${runtimeApiDir}"` : `'${runtimeApiDir.replace(/'/g, `'\\''`)}'`;
 execSync(`pnpm --filter @loongarch-b1/api deploy --legacy --prod ${escapedRuntimeApiDir}`, {
@@ -34,6 +37,7 @@ execSync(`pnpm --filter @loongarch-b1/api deploy --legacy --prod ${escapedRuntim
 
 mkdirSync(runtimeWebDir, { recursive: true });
 cpSync(path.join(rootDir, 'apps', 'web', 'dist'), runtimeWebDir, { recursive: true });
+cpSync(path.join(rootDir, 'docs'), runtimeDocsDir, { recursive: true });
 cpSync(path.join(rootDir, 'scripts', 'deploy'), path.join(runtimeDir, 'scripts', 'deploy'), { recursive: true });
 cpSync(path.join(rootDir, 'docs', 'DEPLOY_KYLIN_LOONGARCH.md'), path.join(runtimeDir, 'DEPLOY_KYLIN_LOONGARCH.md'));
 cpSync(path.join(rootDir, '.env.example'), path.join(runtimeDir, '.env.example'));
@@ -49,7 +53,7 @@ function writeRuntimePackageManifest(targetDir) {
     private: false,
     version: rootManifest.version,
     description: 'Runtime bundle for loongarch-b1 deployment',
-    files: ['api', 'web', 'scripts', 'bin', 'loongarch-b1', '.env.example', 'DEPLOY_KYLIN_LOONGARCH.md', 'README.md'],
+    files: ['api', 'web', 'docs', 'scripts', 'bin', 'loongarch-b1', '.env.example', 'DEPLOY_KYLIN_LOONGARCH.md', 'README.md'],
     bin: {
       'loongarch-b1': './bin/loongarch-b1.js',
     },
@@ -198,8 +202,8 @@ function writeRuntimeNpmTarball(targetDir, commitShortSha) {
     throw new Error('Failed to create runtime npm tarball');
   }
 
-  const sourcePath = path.join(releaseDir, 'bundles', packOutput);
-  const targetPath = path.join(releaseDir, 'bundles', `loongarch-b1-runtime-npm-${commitShortSha}.tgz`);
+  const sourcePath = path.join(bundlesDir, packOutput);
+  const targetPath = path.join(bundlesDir, `loongarch-b1-runtime-npm-${commitShortSha}.tgz`);
   rmSync(targetPath, { force: true });
   cpSync(sourcePath, targetPath);
   if (sourcePath !== targetPath) {

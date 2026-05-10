@@ -13,7 +13,7 @@
 
 CD 工作流会生成 `release/` 目录并上传为 artifact：
 
-- `runtime/`：主交付运行时目录，包含 API 生产依赖、后端构建产物、前端静态文件和部署脚本。
+- `runtime/`：主交付运行时目录，包含 API 生产依赖、后端构建产物、前端静态文件、`docs/` 索引和部署脚本。
 - `runtime/package.json`：部署专用 npm 入口，支持 `npm run start` / `npm run worker:all` / `npm run db:migrate`，并提供 `loongarch-b1` CLI。
 - `runtime/loongarch-b1`：直接执行的 CLI 入口。
 - `web/`：前端 Vite 构建产物，可由 Nginx 或静态服务托管。
