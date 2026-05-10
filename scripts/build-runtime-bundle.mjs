@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const rootDir = process.cwd();
@@ -35,3 +35,27 @@ cpSync(path.join(rootDir, 'scripts', 'deploy'), path.join(runtimeDir, 'scripts',
 cpSync(path.join(rootDir, 'docs', 'DEPLOY_KYLIN_LOONGARCH.md'), path.join(runtimeDir, 'DEPLOY_KYLIN_LOONGARCH.md'));
 cpSync(path.join(rootDir, '.env.example'), path.join(runtimeDir, '.env.example'));
 cpSync(path.join(rootDir, 'README.md'), path.join(runtimeDir, 'README.md'));
+writeRuntimePackageManifest(runtimeDir);
+
+function writeRuntimePackageManifest(targetDir) {
+  const manifest = {
+    name: 'loongarch-b1-runtime',
+    private: true,
+    version: '0.1.0',
+    description: 'Runtime bundle for loongarch-b1 deployment',
+    scripts: {
+      start: 'node api/dist/main.js',
+      'worker:all': 'node api/dist/workers/all-workers.js',
+      'db:migrate': 'node api/dist/database/migrate.js',
+      'start:stack': 'bash scripts/deploy/kylin-loongarch/start-stack.sh',
+      'stop:stack': 'bash scripts/deploy/kylin-loongarch/stop-stack.sh',
+      'status:stack': 'bash scripts/deploy/kylin-loongarch/status-stack.sh',
+    },
+    engines: {
+      node: '>=22 <25',
+      npm: '>=10',
+    },
+  };
+
+  writeFileSync(path.join(targetDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+}
