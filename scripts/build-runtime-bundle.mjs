@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const rootDir = process.cwd();
@@ -7,9 +7,11 @@ const releaseDir = path.join(rootDir, 'release');
 const runtimeDir = path.join(releaseDir, 'runtime');
 const runtimeApiDir = path.join(runtimeDir, 'api');
 const runtimeWebDir = path.join(runtimeDir, 'web');
+const rootManifest = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 
 const requiredFiles = [
   path.join(rootDir, 'apps', 'api', 'dist', 'main.js'),
+  path.join(rootDir, 'apps', 'api', 'dist', 'database', 'migrate.js'),
   path.join(rootDir, 'apps', 'api', 'dist', 'workers', 'all-workers.js'),
   path.join(rootDir, 'apps', 'web', 'dist', 'index.html'),
 ];
@@ -41,7 +43,7 @@ function writeRuntimePackageManifest(targetDir) {
   const manifest = {
     name: 'loongarch-b1-runtime',
     private: true,
-    version: '0.1.0',
+    version: rootManifest.version,
     description: 'Runtime bundle for loongarch-b1 deployment',
     scripts: {
       start: 'node api/dist/main.js',
