@@ -7,7 +7,6 @@ const releaseDir = path.join(rootDir, 'release');
 const runtimeDir = path.join(releaseDir, 'runtime');
 const runtimeApiDir = path.join(runtimeDir, 'api');
 const runtimeWebDir = path.join(runtimeDir, 'web');
-const runtimeDocsDir = path.join(runtimeDir, 'docs');
 const bundlesDir = path.join(releaseDir, 'bundles');
 const rootManifest = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 const shortSha = resolveShortSha();
@@ -37,12 +36,11 @@ execSync(`pnpm --filter @loongarch-b1/api deploy --legacy --prod ${escapedRuntim
 
 mkdirSync(runtimeWebDir, { recursive: true });
 cpSync(path.join(rootDir, 'apps', 'web', 'dist'), runtimeWebDir, { recursive: true });
-cpSync(path.join(rootDir, 'docs'), runtimeDocsDir, { recursive: true });
 cpSync(path.join(rootDir, 'scripts', 'deploy'), path.join(runtimeDir, 'scripts', 'deploy'), { recursive: true });
 cpSync(path.join(rootDir, 'docs', 'DEPLOY_KYLIN_LOONGARCH.md'), path.join(runtimeDir, 'DEPLOY_KYLIN_LOONGARCH.md'));
 cpSync(path.join(rootDir, '.env.example'), path.join(runtimeDir, '.env.example'));
-cpSync(path.join(rootDir, 'README.md'), path.join(runtimeDir, 'README.md'));
 writeRuntimePackageManifest(runtimeDir);
+writeRuntimeReadme(runtimeDir);
 writeRuntimeCliScript(runtimeDir);
 writeRuntimeLauncher(runtimeDir);
 writeRuntimeNpmTarball(runtimeDir, shortSha);
@@ -53,7 +51,7 @@ function writeRuntimePackageManifest(targetDir) {
     private: false,
     version: rootManifest.version,
     description: 'Runtime bundle for loongarch-b1 deployment',
-    files: ['api', 'web', 'docs', 'scripts', 'bin', 'loongarch-b1', '.env.example', 'DEPLOY_KYLIN_LOONGARCH.md', 'README.md'],
+    files: ['api', 'web', 'scripts', 'bin', 'loongarch-b1', '.env.example', 'DEPLOY_KYLIN_LOONGARCH.md', 'README.md'],
     bin: {
       'loongarch-b1': './bin/loongarch-b1.js',
     },
@@ -72,6 +70,38 @@ function writeRuntimePackageManifest(targetDir) {
   };
 
   writeFileSync(path.join(targetDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+}
+
+function writeRuntimeReadme(targetDir) {
+  const readmePath = path.join(targetDir, 'README.md');
+  const readmeContent = [
+    '# loongarch-b1 runtime',
+    '',
+    'This package is the deployment runtime bundle for loongarch-b1.',
+    '',
+    '## Commands',
+    '',
+    '- `./loongarch-b1 start`',
+    '- `./loongarch-b1 worker:all`',
+    '- `./loongarch-b1 db:migrate`',
+    '',
+    '## Environment',
+    '',
+    '- `DATABASE_URL`',
+    '- `AUTH_TOKEN_SECRET`',
+    '- `AUTH_BOOTSTRAP_TOKEN`',
+    '- `STORAGE_ROOT`',
+    '- `WEB_DIST_DIR`',
+    '',
+    '## Layout',
+    '',
+    '- `api/`: production API package',
+    '- `web/`: static web assets',
+    '- `scripts/`: deployment helpers',
+    '- `DEPLOY_KYLIN_LOONGARCH.md`: deployment guide',
+    '',
+  ].join('\n');
+  writeFileSync(readmePath, readmeContent, 'utf8');
 }
 
 function writeRuntimeCliScript(targetDir) {
