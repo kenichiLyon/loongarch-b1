@@ -62,6 +62,7 @@ cp .env.example .env
 
 ```text
 /opt/loongarch-b1
+  package.json
   api/
   web/
   scripts/
@@ -73,6 +74,8 @@ cp .env.example .env
 
 - 源码布局：`apps/api/dist` + `apps/web/dist`
 - Release 布局：`api/dist` + `web/`
+
+运行时压缩包里还会带一个部署专用 `package.json`，用于兼容 `npm run ...` 的常见使用方式。
 
 如果只拿到 `runtime` 压缩包，直接解压即可：
 
@@ -111,6 +114,28 @@ bash scripts/deploy/kylin-loongarch/status-stack.sh
 ```bash
 bash scripts/deploy/kylin-loongarch/stop-stack.sh
 ```
+
+## 6.1 npm 方式启动
+
+如果部署方更习惯 `npm`，runtime 包解压后也支持：
+
+```bash
+npm run db:migrate
+npm run start
+```
+
+后台 worker：
+
+```bash
+npm run worker:all
+```
+
+脚本说明：
+
+- `npm run start`：启动 API，并托管 `web/`
+- `npm run worker:all`：启动解析、评价、导出合并 worker
+- `npm run db:migrate`：执行数据库迁移
+- `npm run start:stack`：等价于 `bash scripts/deploy/kylin-loongarch/start-stack.sh`
 
 ## 7. 运行日志
 

@@ -159,6 +159,7 @@ release/runtime
 
 它包含：
 
+- `package.json`：部署专用入口，可直接用 `npm run ...`
 - `api/`：后端代码和生产依赖
 - `web/`：前端静态文件
 - `scripts/deploy/kylin-loongarch/`：启动、停止、状态脚本
@@ -167,6 +168,14 @@ release/runtime
 
 ```bash
 bash scripts/deploy/kylin-loongarch/start-stack.sh
+```
+
+如果部署方更习惯 `npm`，runtime 包也支持：
+
+```bash
+npm run start
+npm run worker:all
+npm run db:migrate
 ```
 
 ### 解析 Worker
