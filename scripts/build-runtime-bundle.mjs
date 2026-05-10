@@ -8,7 +8,7 @@ const runtimeDir = path.join(releaseDir, 'runtime');
 const runtimeApiDir = path.join(runtimeDir, 'api');
 const runtimeWebDir = path.join(runtimeDir, 'web');
 const rootManifest = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-const shortSha = execSync('git rev-parse --short HEAD', { cwd: rootDir, encoding: 'utf8' }).trim();
+const shortSha = resolveShortSha();
 
 const requiredFiles = [
   path.join(rootDir, 'apps', 'api', 'dist', 'main.js'),
@@ -177,15 +177,22 @@ function writeRuntimeLauncher(targetDir) {
 }
 
 function writeRuntimeNpmTarball(targetDir, commitShortSha) {
-  const packOutput = execSync('npm pack --pack-destination ../bundles', {
-    cwd: targetDir,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-    .trim()
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .at(-1);
+  let packOutput;
+  try {
+    packOutput = execSync('npm pack --pack-destination ../bundles', {
+      cwd: targetDir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+      .trim()
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .at(-1);
+  } catch (error) {
+    throw new Error(`Failed to create runtime npm tarball: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    });
+  }
 
   if (!packOutput) {
     throw new Error('Failed to create runtime npm tarball');
@@ -197,5 +204,13 @@ function writeRuntimeNpmTarball(targetDir, commitShortSha) {
   cpSync(sourcePath, targetPath);
   if (sourcePath !== targetPath) {
     rmSync(sourcePath, { force: true });
+  }
+}
+
+function resolveShortSha() {
+  try {
+    return execSync('git rev-parse --short HEAD', { cwd: rootDir, encoding: 'utf8' }).trim();
+  } catch {
+    return `unknown-${Date.now().toString(36)}`;
   }
 }
