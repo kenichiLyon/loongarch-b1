@@ -14,6 +14,7 @@
 CD 工作流会生成 `release/` 目录并上传为 artifact：
 
 - `runtime/`：主交付运行时目录，包含 API 生产依赖、后端构建产物、前端静态文件和部署脚本。
+- `runtime/package.json`：部署专用 npm 入口，支持 `npm run start` / `npm run worker:all` / `npm run db:migrate`。
 - `web/`：前端 Vite 构建产物，可由 Nginx 或静态服务托管。
 - `api/`：后端 `dist/`、API package.json、数据库迁移 SQL。
 - `docs/`：README、AGENT、部署与开发文档。
@@ -64,7 +65,7 @@ Release 资产现在包含 `runtime/web/api/docs/docker-context` 对应压缩包
 
 ## 目标环境落地说明
 
-- `runtime` 产物是主交付：目标环境不需要再次执行 `pnpm install`，解压后即可用 `node` 或 `start-stack.sh` 启动。
+- `runtime` 产物是主交付：目标环境不需要再次执行 `pnpm install`，解压后即可用 `node`、`npm run ...` 或 `start-stack.sh` 启动。
 - Web 产物仍单独保留，可部署到 Nginx，也可由 API 进程直接托管。
 - `api` 产物保留为调试/拆分部署用途，不包含 `node_modules`。
 - 数据库迁移 SQL 随 API 产物一起发布，部署时执行 `pnpm db:migrate`。
